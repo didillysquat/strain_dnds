@@ -1,0 +1,6 @@
+channels:
+  - bioconda
+dependencies:
+  - trinity =2.8.5
+  - rcorrector =1.0.4
+  - trimmomatic =0.39

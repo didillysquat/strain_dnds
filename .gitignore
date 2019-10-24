@@ -1,0 +1,10 @@
+.gitignore
+Snakefile
+TruSeq3-PE.fa
+envs/strain_deg.yaml
+.idea/
+.snakemake/
+err_corrected/
+fastqc/
+raw_reads/
+trimmed/
