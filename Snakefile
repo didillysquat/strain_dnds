@@ -1,5 +1,7 @@
 # Produce fastq files for each of the raw transcript sequncing files
 # $ snakemake --cores 24 fastqc/b_minutum/SRR17933{20..23}_{1,2}_fastqc.html fastqc/b_psygmophilum/SRR17933{24..27}_{1,2}_fastqc.html
+import os
+import sys
 sra_dict = {"b_minutum":["SRR1793320", "SRR1793321", "SRR1793322", "SRR1793323"], "b_psygmophilum": ["SRR1793324", "SRR1793325", "SRR1793326", "SRR1793327"]}
 wildcard_constraints:
     sra="SRR\d+"
@@ -69,14 +71,98 @@ rule err_correct:
 		"run_rcorrector.pl -1 {input.fwd} -2 {input.rev} -od err_corrected/{wildcards.species}/ -t {threads}"
 
 # Assemble the QC reads using Trinity
+# snakemake -np --cores 24 trinity_assembly/b_minutum/SRR17933{20..23}_trinity/Trinity.fasta trinity_assembly/b_psygmophilum/SRR17933{24..27}_trinity/Trinity.fasta
 rule assemble:
 	input:
 		fwd="err_corrected/{species}/{sra}.trimmed_1P.cor.fq.gz",
 		rev="err_corrected/{species}/{sra}.trimmed_2P.cor.fq.gz"
 	output:
-		"apple_pie_{species}_{sra}.txt"
+		"trinity_assembly/{species}/{sra}_trinity.Trinity.fasta",
+		"trinity_assembly/{species}/{sra}_trinity.Trinity.fasta.gene_trans_map"
+	conda:
+		"envs/strain_deg.yaml"
+	threads:6
+	shell:
+		"Trinity --left {input.fwd} --right {input.rev} --seqType fq --max_memory 100G --CPU {threads} "
+		"--min_contig_length 250 --output trinity_assembly/{wildcards.species}/{wildcards.sra}_trinity "
+		"--full_cleanup"
+    
+rule get_swiss_prot_db:
+	output:
+		"db/swiss_prot/uniprot_sprot.fasta.gz"
+	shell:
+		"wget -O {output} ftp://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz"
+
+rule get_trembl_db:
+	output:
+		"db/trembl/uniprot_trembl.fasta.gz"
+	shell:
+		"wget -O {output} ftp://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_trembl.fasta.gz"
+
+rule get_ncbi_nr_db:
+	output:
+		"nr.fasta"
+	shell:
+		"bash breviolum_transcriptomes/db/ncbi_nr/update_blastdb_wrapper.sh"
+
+rule get_uni_prot_goa_db:
+	output:
+		"db/uniprot_goa/goa_uniprot_all.gaf.gz"
+	shell:
+		"wget -O {output} ftp://ftp.ebi.ac.uk/pub/databases/GO/goa/UNIPROT/goa_uniprot_all.gaf.gz"
+
+rule gunzip_uni_prot_goa_db:
+	input:
+		"db/uniprot_goa/goa_uniprot_all.gaf.gz"
+	output:
+		"db/uniprot_goa/goa_uniprot_all.gaf"
+	shell:
+		"gunzip {input}"
+
+rule gunzip_swiss_prot_db:
+	input:
+		"db/swiss_prot/uniprot_sprot.fasta.gz"
+	output:
+		"db/swiss_prot/uniprot_sprot.fasta"
+	shell:
+		"gunzip {input}"
+
+rule gunzip_tremble_db:
+	input:
+		"db/trembl/uniprot_trembl.fasta.gz"
+	output:
+		"db/trembl/uniprot_trembl.fasta"
+	shell:
+		"gunzip {input}"
+
+rule make_swiss_prot_db:
+	input:
+		"db/swiss_prot/uniprot_sprot.fasta"
+	output:
+		"db/swiss_prot/uniprot_sprot.phr",
+		"db/swiss_prot/uniprot_sprot.pin",
+		"db/swiss_prot/uniprot_sprot.psq"
+	shell:
+		"makeblastdb -in {input} -out db/swiss_prot/uniprot_sprot -dbtype prot"
+
+rule make_tremble_prot_db:
+	input:
+		"db/trembl/uniprot_trembl.fasta"
+	output:
+		"db/trembl/uniprot_trembl.phr",
+		"db/trembl/uniprot_trembl.pin",
+		"db/trembl/uniprot_trembl.psq"
+	shell:
+		"makeblastdb -in {input} -out db/trembl/uniprot_trembl -dbtype prot"
+
+# This rule will create a new trinity fasta file that retains only the longest version of those
+# genes that had multiple predicted isoforms
+rule remove_short_iso_forms:
+	input:
+		"trinity_assembly/{species}/{sra}_trinity.Trinity.fasta"
+	output:
+		"trinity_assembly/{species}/{sra}_trinity.Trinity.long_iso_only.fasta"
 	conda:
 		"envs/strain_deg.yaml"
 	shell:
-		"Trinity --left {input.fwd} --right {input.rev} --seqType fq --max_memory 500G --CPU 24 --min_contig_length 250 --output ./trinity_assembly/{wildcards.species}_trinity"
-    
+		"python3.6 scripts/remove_short_isos.py {input} {output}"
