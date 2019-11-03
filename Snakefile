@@ -188,15 +188,13 @@ rule additional_blasts:
 		swiss_prot_blast_output = "blast_matches/swiss_prot/{species}/{sra}_sp_blast.out.txt",
 		long_iso_only_transcript_fasta = "trinity_assembly/{species}/{sra}_trinity.Trinity.long_iso_only.fasta",
 		trembl_db_item_path = "db/trembl/uniprot_trembl.pal",
-		trembl_db_path_string = "db/trembl/uniprot_trembl",
 		ncbi_db_item_path = "db/ncbi_nr/nr.pal",
-		ncbi_db_path_string = "db/ncbi_nr/nr"
-	threads:6
+	threads:24 #TODO change this back to 6 when running for real
 	output:
 		consolidated_blast_out_results = "blast_matches/{species}_consolidated/{sra}_consolidated_blast.out.txt"
 	shell:
 		"python3.6 scripts/additional_blasts.py {input.swiss_prot_blast_output} {input.long_iso_only_transcript_fasta} "
-		"{input.trembl_db_path_string} {input.ncbi_db_path_string} "
+		"db/trembl/uniprot_trembl db/ncbi_nr/nr "
 		"blast_matches/trembl/{wildcards.species}/{wildcards.sra}_trembl_blast.out.txt "
 		"blast_matches/ncbi_nr/{wildcards.species}/{wildcards.sra}_ncbi_nr_blast.out.txt "
 		"{output.consolidated_blast_out_results} "
