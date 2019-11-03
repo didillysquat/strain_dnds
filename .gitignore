@@ -8,3 +8,8 @@ err_corrected/
 fastqc/
 raw_reads/
 trimmed/
+blast_matches/
+db/
+pycharm_parameters_additional_blasts
+trinity_assembly/
+wget-log
