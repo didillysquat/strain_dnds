@@ -166,3 +166,40 @@ rule remove_short_iso_forms:
 		"envs/strain_deg.yaml"
 	shell:
 		"python3.6 scripts/remove_short_isos.py {input} {output}"
+
+# Blast each of the .long_iso_only.fasta files against the swissprot, trembl and ncbi nr databases in that order
+# retaining the blast hits that were < 1x10-5. Those that aren't matched at that level blast against the next db.
+rule blast_against_swiss_prot:
+	input:
+		query_fasta = "trinity_assembly/{species}/{sra}_trinity.Trinity.long_iso_only.fasta",
+		made_db_path = "db/swiss_prot/uniprot_sprot.psq"
+	output:
+		"blast_matches/swiss_prot/{species}/{sra}_sp_blast.out.txt"
+	threads:6
+	shell:
+		"blastx -query {input.query_fasta} -out {output} -db db/swiss_prot/uniprot_sprot -num_threads {threads} -outfmt 6 -evalue 1e-5"
+
+# Perform additional blasts if required (i.e. if not all transcripts had a hit. And then create a blast.out.txt that
+# is the consolidation of the (upto) 3 blast searches and put in separate directory
+rule additional_blasts:
+	# Must ensure that the initial swiss prot blast has been conducted
+	# Must also ensure that the other two databases are available
+	input:
+		swiss_prot_blast_output = "blast_matches/swiss_prot/{species}/{sra}_sp_blast.out.txt",
+		long_iso_only_transcript_fasta = "trinity_assembly/{species}/{sra}_trinity.Trinity.long_iso_only.fasta",
+		trembl_db_item_path = "db/trembl/uniprot_trembl.pal",
+		trembl_db_path_string = "db/trembl/uniprot_trembl",
+		ncbi_db_item_path = "db/ncbi_nr/nr.pal",
+		ncbi_db_path_string = "db/ncbi_nr/nr"
+	threads:6
+	output:
+		consolidated_blast_out_results = "blast_matches/{species}_consolidated/{sra}_consolidated_blast.out.txt"
+	shell:
+		"python3.6 scripts/additional_blasts.py {input.swiss_prot_blast_output} {input.long_iso_only_transcript_fasta} "
+		"{input.trembl_db_path_string} {input.ncbi_db_path_string} "
+		"blast_matches/trembl/{wildcards.species}/{wildcards.sra}_trembl_blast.out.txt "
+		"blast_matches/ncbi_nr/{wildcards.species}/{wildcards.sra}_ncbi_nr_blast.out.txt "
+		"{output.consolidated_blast_out_results} "
+		"blast_matches/trembl/{wildcards.species}/{wildcards.sra}_trembl_no_match_blast_in.fasta "
+		"blast_matches/ncbi_nr/{wildcards.species}/{wildcards.sra}_ncbi_nr_no_match_blast_in.fasta {threads} "
+        "{wildcards.species} {wildcards.sra}"

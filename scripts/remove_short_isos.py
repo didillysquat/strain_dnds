@@ -5,7 +5,6 @@ import sys
 
 def remove_short_isoform_sequences():
 
-
 	input_trinity_fasta_path = sys.argv[1]
 	output_trinity_fasta_path = input_trinity_fasta_path.replace('.fasta', '.long_iso_only.fasta')
 	print(f'Removing short isoform sequences from: {input_trinity_fasta_path}')
