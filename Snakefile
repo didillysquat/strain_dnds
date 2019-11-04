@@ -1,7 +1,7 @@
 # Produce fastq files for each of the raw transcript sequncing files
 # $ snakemake --cores 24 fastqc/b_minutum/SRR17933{20..23}_{1,2}_fastqc.html fastqc/b_psygmophilum/SRR17933{24..27}_{1,2}_fastqc.html
-import os
-import sys
+from itertools import combinations
+import subprocess
 sra_dict = {"b_minutum":["SRR1793320", "SRR1793321", "SRR1793322", "SRR1793323"], "b_psygmophilum": ["SRR1793324", "SRR1793325", "SRR1793326", "SRR1793327"]}
 wildcard_constraints:
     sra="SRR\d+"
@@ -181,6 +181,8 @@ rule blast_against_swiss_prot:
 
 # Perform additional blasts if required (i.e. if not all transcripts had a hit. And then create a blast.out.txt that
 # is the consolidation of the (upto) 3 blast searches and put in separate directory
+#NB this is taking so long that we will abandon doing it for the time being and see if we can
+# move forward with the dnds predictions without annotations.
 rule additional_blasts:
 	# Must ensure that the initial swiss prot blast has been conducted
 	# Must also ensure that the other two databases are available
@@ -188,10 +190,12 @@ rule additional_blasts:
 		swiss_prot_blast_output = "blast_matches/swiss_prot/{species}/{sra}_sp_blast.out.txt",
 		long_iso_only_transcript_fasta = "trinity_assembly/{species}/{sra}_trinity.Trinity.long_iso_only.fasta",
 		trembl_db_item_path = "db/trembl/uniprot_trembl.pal",
-		ncbi_db_item_path = "db/ncbi_nr/nr.pal",
+		ncbi_db_item_path = "db/ncbi_nr/nr.pal"
 	threads:24 #TODO change this back to 6 when running for real
 	output:
 		consolidated_blast_out_results = "blast_matches/{species}_consolidated/{sra}_consolidated_blast.out.txt"
+	conda:
+		"envs/strain_deg.yaml"
 	shell:
 		"python3.6 scripts/additional_blasts.py {input.swiss_prot_blast_output} {input.long_iso_only_transcript_fasta} "
 		"db/trembl/uniprot_trembl db/ncbi_nr/nr "
@@ -201,3 +205,90 @@ rule additional_blasts:
 		"blast_matches/trembl/{wildcards.species}/{wildcards.sra}_trembl_no_match_blast_in.fasta "
 		"blast_matches/ncbi_nr/{wildcards.species}/{wildcards.sra}_ncbi_nr_no_match_blast_in.fasta {threads} "
         "{wildcards.species} {wildcards.sra}"
+
+# We will use transdecoder to predict ORFs
+rule orf_prediction:
+	input:
+		"trinity_assembly/{species}/{sra}_trinity.Trinity.long_iso_only.fasta"
+	output:
+		"orf_prediction/{species}/{sra}/base_freqs.dat",
+		"orf_prediction/{species}/{sra}/longest_orfs.cds",
+		"orf_prediction/{species}/{sra}/longest_orfs.gff3",
+		"orf_prediction/{species}/{sra}/longest_orfs.pep"
+	shell:
+		"TransDecoder.LongOrfs -t {input} -O orf_prediction/{wildcards.species}/{wildcards.sra}"
+
+# TODO consider whether we should be working with only a single ORF per transcript or we work with multiple
+# To start with, we'll work with all ORFs and then revert back to selecting a single orthologous orf
+# from each of the transcripts
+
+# We will need a blast database for each of the predicted ORFs.
+rule make_db_from_long_iso_only_transcriptomes:
+	input:
+		"orf_prediction/{species}/{sra}/longest_orfs.pep"
+	output:
+		"orf_prediction/{species}/{sra}/longest_orfs.phr",
+		"orf_prediction/{species}/{sra}/longest_orfs.pin",
+		"orf_prediction/{species}/{sra}/longest_orfs.psq"
+	shell:
+		"makeblastdb -in {input} -dbtype prot -out orf_prediction/{wildcards.species}/{wildcards.sra}/longest_orfs -title longest_orfs"
+
+# sonic paranoid operates on a directory that contains all of the fastafiles that the orthologs will be predicted
+# from. E
+rule copy_pep_files_for_sonicparanoid:
+
+# We will do ortholog prediction using reciprocal blast.
+# This was previously done using a combination of inparanoid and multiparanoid.
+# However these aren't on conda and they only use an old version of the blast packages
+# As such we will implement this ourselves using a python script.
+# The output of this will be a list of 4 way orthologous genes
+# rule orthology_best_reciprocal_hit_prediction:
+# 	input:
+# 		expand("orf_prediction/b_minutum/{sra}/longest_orfs.pep", sra=sra_dict['b_minutum']),
+# 		expand("orf_prediction/b_psygmophilum/{sra}/longest_orfs.pep", sra=sra_dict['b_psygmophilum'])
+# 	output:
+# 		"inparanoid.out.txt"
+# 	conda:
+# 		"scripts/inparanoid.yaml"
+# 	run:
+# 		# first make the list of the orf prediction .pep files that will be used in the pairwise inparanoid
+# 		# comparisons
+# 		pep_files = []
+# 		for species_k, sra_list in sra_dict.items():
+# 			for sra_item in sra_list:
+# 				pep_files.append(f"orf_prediction/{species_k}/{sra_item}/longest_orfs.pep")
+#
+# 		# Here we have a list of the pep files that we will need to do pairwise comparisons
+# 		# use the combinations from itertools
+# 		for pep_1, pep_2 in combinations(pep_files, 2):
+# 			# run the inparanoid
+# 			subprocess.run(
+#             ['perl', 'scripts/inparanoid4/inparanoid.pl', pep_1, pep_2])
+
+# Because inparanoid is so slow and only runs with legacy blast and can't make use of multiple threads
+# etc. we are going to try to use sonicparanoid. It should be much quicker.
+# Getting it running was not easy. The conda install doesn't seem to work because of some requirement problem
+# with a program called mmseqs2. However installing via pip eliviates this problem.
+# so I have modifed the conda environment inparanoid.yaml according to this thread
+# https://stackoverflow.com/questions/35245401/combining-conda-environment-yml-with-pip-requirements-txt
+# to install sonicparanoid via pip rather than conda.
+# the yaml file looks like this:
+"""
+channels:
+  - bioconda
+dependencies:
+  - python=3.7
+  - pip
+  - pip:
+      - sonicparanoid==1.2.6
+"""
+rule tester:
+	output:
+		"tester.txt"
+	conda:
+		"envs/inparanoid.yaml"
+	shell:
+		# subprocess.run(['pip', 'install', 'sonicparanoid'])
+		"""
+		sonicparanoid -h
+		"""
