@@ -2,6 +2,7 @@
 # $ snakemake --cores 24 fastqc/b_minutum/SRR17933{20..23}_{1,2}_fastqc.html fastqc/b_psygmophilum/SRR17933{24..27}_{1,2}_fastqc.html
 from itertools import combinations
 import subprocess
+import os
 sra_dict = {"b_minutum":["SRR1793320", "SRR1793321", "SRR1793322", "SRR1793323"], "b_psygmophilum": ["SRR1793324", "SRR1793325", "SRR1793326", "SRR1793327"]}
 wildcard_constraints:
     sra="SRR\d+"
@@ -233,10 +234,33 @@ rule make_db_from_long_iso_only_transcriptomes:
 	shell:
 		"makeblastdb -in {input} -dbtype prot -out orf_prediction/{wildcards.species}/{wildcards.sra}/longest_orfs -title longest_orfs"
 
-# sonic paranoid operates on a directory that contains all of the fastafiles that the orthologs will be predicted
-# from. E
-rule copy_pep_files_for_sonicparanoid:
 
+
+def copy_pep_files():
+    # create the sonic paranoid directory if it does not already exist
+    dir_to_make = os.path.abspath('sonicparanoid')
+    print(f'making dir {dir_to_make}')
+    os.makedirs(dir_to_make, exist_ok=True)
+
+    # now copy over each of the files
+    for species_key, sra_list in sra_dict.items():
+        for sra_val in sra_list:
+            from_val = os.path.abspath(f'orf_prediction/{species_key}/{sra_val}/longest_orfs.pep')
+            to_val = os.path.abspath(f'sonicparanoid/{sra_val}_longest_orfs.pep')
+            print(f'Copying {from_val} to {to_val}')
+            subprocess.run(['cp', from_val, to_val])
+
+# sonic paranoid operates on a directory that contains all of the fastafiles that the orthologs will be predicted
+# from. So we need to create this directory and copy over the .pep files into this directory
+rule copy_pep_files_for_sonicparanoid:
+	input:
+		expand("orf_prediction/b_minutum/{sra}/longest_orfs.pep", sra=sra_dict['b_minutum']),
+		expand("orf_prediction/b_psygmophilum/{sra}/longest_orfs.pep", sra=sra_dict['b_psygmophilum'])
+	output:
+		expand("sonicparanoid/{sra}_longest_orfs.pep", sra=sra_dict['b_minutum']),
+		expand("sonicparanoid/{sra}_longest_orfs.pep", sra=sra_dict['b_psygmophilum'])
+	run:
+		copy_pep_files()
 # We will do ortholog prediction using reciprocal blast.
 # This was previously done using a combination of inparanoid and multiparanoid.
 # However these aren't on conda and they only use an old version of the blast packages
