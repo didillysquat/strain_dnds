@@ -261,42 +261,16 @@ rule copy_pep_files_for_sonicparanoid:
 		expand("sonicparanoid/{sra}_longest_orfs.pep", sra=sra_dict['b_psygmophilum'])
 	run:
 		copy_pep_files()
+
 # We will do ortholog prediction using reciprocal blast.
 # This was previously done using a combination of inparanoid and multiparanoid.
-# However these aren't on conda and they only use an old version of the blast packages
-# As such we will implement this ourselves using a python script.
-# The output of this will be a list of 4 way orthologous genes
-# rule orthology_best_reciprocal_hit_prediction:
-# 	input:
-# 		expand("orf_prediction/b_minutum/{sra}/longest_orfs.pep", sra=sra_dict['b_minutum']),
-# 		expand("orf_prediction/b_psygmophilum/{sra}/longest_orfs.pep", sra=sra_dict['b_psygmophilum'])
-# 	output:
-# 		"inparanoid.out.txt"
-# 	conda:
-# 		"scripts/inparanoid.yaml"
-# 	run:
-# 		# first make the list of the orf prediction .pep files that will be used in the pairwise inparanoid
-# 		# comparisons
-# 		pep_files = []
-# 		for species_k, sra_list in sra_dict.items():
-# 			for sra_item in sra_list:
-# 				pep_files.append(f"orf_prediction/{species_k}/{sra_item}/longest_orfs.pep")
-#
-# 		# Here we have a list of the pep files that we will need to do pairwise comparisons
-# 		# use the combinations from itertools
-# 		for pep_1, pep_2 in combinations(pep_files, 2):
-# 			# run the inparanoid
-# 			subprocess.run(
-#             ['perl', 'scripts/inparanoid4/inparanoid.pl', pep_1, pep_2])
-
-# Because inparanoid is so slow and only runs with legacy blast and can't make use of multiple threads
-# etc. we are going to try to use sonicparanoid. It should be much quicker.
-# Getting it running was not easy. The conda install doesn't seem to work because of some requirement problem
-# with a program called mmseqs2. However installing via pip eliviates this problem.
-# so I have modifed the conda environment inparanoid.yaml according to this thread
-# https://stackoverflow.com/questions/35245401/combining-conda-environment-yml-with-pip-requirements-txt
-# to install sonicparanoid via pip rather than conda.
-# the yaml file looks like this:
+# This is painstakingly slow and only runs using the old blast.
+# Instead we will use sonicparanoid that uses the same algorithms as inparanoid but
+# uses mmseq2 instead of blast.
+# The conda install of sonicblast doesn't work so you have to install it using pip
+# we can work this into the conda env as such
+# NB this is acutally causing us problems from within the snakemake file
+# we keep getting an ERROR saying that the run ID parkinson_slc was used in a previous run.
 """
 channels:
   - bioconda
@@ -306,13 +280,49 @@ dependencies:
   - pip:
       - sonicparanoid==1.2.6
 """
-rule tester:
+rule orthology_sonic_paranoid:
+	input:
+		expand("sonicparanoid/{sra}_longest_orfs.pep", sra=sra_dict['b_minutum']),
+		expand("sonicparanoid/{sra}_longest_orfs.pep", sra=sra_dict['b_psygmophilum'])
 	output:
-		"tester.txt"
+		"sonicparanoid/output/runs/parkinson/ortholog_groups/ortholog_groups.tsv"
+	log:
+		"logs/sonicparanoid.log"
 	conda:
 		"envs/inparanoid.yaml"
+	threads:24
 	shell:
-		# subprocess.run(['pip', 'install', 'sonicparanoid'])
-		"""
-		sonicparanoid -h
-		"""
+		"sonicparanoid -i sonicparanoid -o sonicparanoid/output -p parkinson -t {threads}"
+
+rule orthology_sonic_paranoid_slc:
+	input:
+		expand("sonicparanoid/{sra}_longest_orfs.pep", sra=sra_dict['b_minutum']),
+		expand("sonicparanoid/{sra}_longest_orfs.pep", sra=sra_dict['b_psygmophilum'])
+	output:
+		"sonicparanoid_out/runs"
+	conda:
+		"envs/sonicparanoid.yaml"
+	threads:24
+	shell:
+		"sonicparanoid -i sonicparanoid -o sonicparanoid_out -t {threads} -slc"
+		# "python3 scripts/install_and_run_sonicparanoid.py"
+
+# Use the output from sonicparanoid to extract those ortholog groups that contain all 8 of the strains
+# Also make sure that we only have one ortholog per transcript.
+# The output of this will be in the same format as the input
+rule extract_unique_cross_strain_orthologs:
+	input:
+		input_one="sonicparanoid/output/runs/parkinson/ortholog_groups/ortholog_groups.tsv",
+		input_two="sonicparanoid/output/runs/parkinson/ortholog_groups/single-copy_groups.tsv"
+	output:
+		"screened_orthologs/screened_orthologs.tsv"
+	shell:
+		"python3.6 scripts/screen_orthologs.py {input.input_one} {input.input_two} {output}"
+
+rule tester:
+	output:
+		  "tester.txt"
+	conda:
+		 "envs/inparanoid.yaml"
+	shell:
+		 "sonicparanoid -h"
