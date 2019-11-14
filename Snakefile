@@ -124,22 +124,6 @@ rule remove_multi_orfs_from_pep:
     shell:
         "python3.6 scripts/unique_orfs_from_pep.py {input} {output}"
 
-# TODO consider whether we should be working with only a single ORF per transcript or we work with multiple
-# To start with, we'll work with all ORFs and then revert back to selecting a single orthologous orf
-# from each of the transcripts
-
-# We will need a blast database for each of the predicted ORFs.
-rule make_db_from_long_iso_only_transcriptomes:
-	input:
-		"orf_prediction/{species}/{sra}/longest_orfs.pep"
-	output:
-		"orf_prediction/{species}/{sra}/longest_orfs.phr",
-		"orf_prediction/{species}/{sra}/longest_orfs.pin",
-		"orf_prediction/{species}/{sra}/longest_orfs.psq"
-	shell:
-		"makeblastdb -in {input} -dbtype prot -out orf_prediction/{wildcards.species}/{wildcards.sra}/longest_orfs -title longest_orfs"
-
-
 
 def copy_pep_files():
     # create the sonic paranoid directory if it does not already exist
@@ -159,11 +143,11 @@ def copy_pep_files():
 # from. So we need to create this directory and copy over the .pep files into this directory
 rule copy_pep_files_for_sonicparanoid:
 	input:
-		expand("orf_prediction/b_minutum/{sra}/longest_orfs.pep", sra=sra_dict['b_minutum']),
-		expand("orf_prediction/b_psygmophilum/{sra}/longest_orfs.pep", sra=sra_dict['b_psygmophilum'])
+		expand("orf_prediction/b_minutum/{sra}/longest_iso_orfs.single_orf.pep", sra=sra_dict['b_minutum']),
+		expand("orf_prediction/b_psygmophilum/{sra}/longest_iso_orfs.single_orf.pep", sra=sra_dict['b_psygmophilum'])
 	output:
-		expand("sonicparanoid/{sra}_longest_orfs.pep", sra=sra_dict['b_minutum']),
-		expand("sonicparanoid/{sra}_longest_orfs.pep", sra=sra_dict['b_psygmophilum'])
+		expand("sonicparanoid/{sra}_longest_iso_orfs.single_orf.pep", sra=sra_dict['b_minutum']),
+		expand("sonicparanoid/{sra}_longest_iso_orfs.single_orf.pep", sra=sra_dict['b_psygmophilum'])
 	run:
 		copy_pep_files()
 
@@ -340,3 +324,15 @@ rule additional_blasts:
 		"blast_matches/trembl/{wildcards.species}/{wildcards.sra}_trembl_no_match_blast_in.fasta "
 		"blast_matches/ncbi_nr/{wildcards.species}/{wildcards.sra}_ncbi_nr_no_match_blast_in.fasta {threads} "
         "{wildcards.species} {wildcards.sra}"
+
+# We will need a blast database for each of the predicted ORFs.
+rule make_db_from_long_iso_only_transcriptomes:
+	input:
+		"orf_prediction/{species}/{sra}/longest_orfs.pep"
+	output:
+		"orf_prediction/{species}/{sra}/longest_orfs.phr",
+		"orf_prediction/{species}/{sra}/longest_orfs.pin",
+		"orf_prediction/{species}/{sra}/longest_orfs.psq"
+	shell:
+		"makeblastdb -in {input} -dbtype prot -out orf_prediction/{wildcards.species}/{wildcards.sra}/longest_orfs -title longest_orfs"
+
