@@ -171,8 +171,8 @@ dependencies:
 """
 rule orthology_sonic_paranoid:
 	input:
-		expand("sonicparanoid/{sra}_longest_orfs.pep", sra=sra_dict['b_minutum']),
-		expand("sonicparanoid/{sra}_longest_orfs.pep", sra=sra_dict['b_psygmophilum'])
+		expand("sonicparanoid/{sra}_longest_iso_orfs.single_orf.pep", sra=sra_dict['b_minutum']),
+		expand("sonicparanoid/{sra}_longest_iso_orfs.single_orf.pep", sra=sra_dict['b_psygmophilum'])
 	output:
 		"sonicparanoid/output/runs/parkinson/ortholog_groups/ortholog_groups.tsv"
 	log:
@@ -185,8 +185,8 @@ rule orthology_sonic_paranoid:
 
 rule orthology_sonic_paranoid_slc:
 	input:
-		expand("sonicparanoid/{sra}_longest_orfs.pep", sra=sra_dict['b_minutum']),
-		expand("sonicparanoid/{sra}_longest_orfs.pep", sra=sra_dict['b_psygmophilum'])
+		expand("sonicparanoid/{sra}_longest_iso_orfs.single_orf.pep", sra=sra_dict['b_minutum']),
+		expand("sonicparanoid/{sra}_longest_iso_orfs.single_orf.pep", sra=sra_dict['b_psygmophilum'])
 	output:
 		"sonicparanoid_out/runs"
 	conda:
