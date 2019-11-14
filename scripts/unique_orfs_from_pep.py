@@ -17,7 +17,7 @@ class unique_orfs:
         count = 0
         for seq_rec in self.pep_file:
             count += 1
-            sys.stdout.write(f'\r{((count/tot_len)*100):.2f} percent complete')
+            sys.stdout.write(f'Populating the orf dict: \r{((count/tot_len)*100):.2f} percent complete')
             elements = seq_rec.description.split(' ')
             transcript_id = elements[0].split('.')[0]
             print(f'populating dd dict with {transcript_id}')
@@ -33,7 +33,12 @@ class unique_orfs:
         # Now for each of the gene ids, choose the longest complete ORF
         # If there is not a complete orf just take the longest
         final_pep_list = []
+        count = 0
+        tot_len = len(orf_dd_list)
+        print('\n\n')
         for gene_id, orf_list in orf_dd_list.items():
+            count += 1
+            sys.stdout.write(f'Selecting longest orfs: \r{((count / tot_len) * 100):.2f} percent complete')
             longest_complete = 0
             complete_best_match = None
             longest_non_complete = 0
