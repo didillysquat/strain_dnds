@@ -88,73 +88,6 @@ rule assemble:
 		"--min_contig_length 250 --output trinity_assembly/{wildcards.species}/{wildcards.sra}_trinity "
 		"--full_cleanup"
     
-rule get_swiss_prot_db:
-	output:
-		"db/swiss_prot/uniprot_sprot.fasta.gz"
-	shell:
-		"wget -O {output} ftp://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz"
-
-rule get_trembl_db:
-	output:
-		"db/trembl/uniprot_trembl.fasta.gz"
-	shell:
-		"wget -O {output} ftp://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_trembl.fasta.gz"
-
-rule get_ncbi_nr_db:
-	output:
-		"nr.fasta"
-	shell:
-		"bash breviolum_transcriptomes/db/ncbi_nr/update_blastdb_wrapper.sh"
-
-rule get_uni_prot_goa_db:
-	output:
-		"db/uniprot_goa/goa_uniprot_all.gaf.gz"
-	shell:
-		"wget -O {output} ftp://ftp.ebi.ac.uk/pub/databases/GO/goa/UNIPROT/goa_uniprot_all.gaf.gz"
-
-rule gunzip_uni_prot_goa_db:
-	input:
-		"db/uniprot_goa/goa_uniprot_all.gaf.gz"
-	output:
-		"db/uniprot_goa/goa_uniprot_all.gaf"
-	shell:
-		"gunzip {input}"
-
-rule gunzip_swiss_prot_db:
-	input:
-		"db/swiss_prot/uniprot_sprot.fasta.gz"
-	output:
-		"db/swiss_prot/uniprot_sprot.fasta"
-	shell:
-		"gunzip {input}"
-
-rule gunzip_tremble_db:
-	input:
-		"db/trembl/uniprot_trembl.fasta.gz"
-	output:
-		"db/trembl/uniprot_trembl.fasta"
-	shell:
-		"gunzip {input}"
-
-rule make_swiss_prot_db:
-	input:
-		"db/swiss_prot/uniprot_sprot.fasta"
-	output:
-		"db/swiss_prot/uniprot_sprot.phr",
-		"db/swiss_prot/uniprot_sprot.pin",
-		"db/swiss_prot/uniprot_sprot.psq"
-	shell:
-		"makeblastdb -in {input} -out db/swiss_prot/uniprot_sprot -dbtype prot"
-
-rule make_tremble_prot_db:
-	input:
-		"db/trembl/uniprot_trembl.fasta"
-	output:
-		"db/trembl/uniprot_trembl.phr",
-		"db/trembl/uniprot_trembl.pin",
-		"db/trembl/uniprot_trembl.psq"
-	shell:
-		"makeblastdb -in {input} -out db/trembl/uniprot_trembl -dbtype prot"
 
 # This rule will create a new trinity fasta file that retains only the longest version of those
 # genes that had multiple predicted isoforms
@@ -168,56 +101,28 @@ rule remove_short_iso_forms:
 	shell:
 		"python3.6 scripts/remove_short_isos.py {input} {output}"
 
-# Blast each of the .long_iso_only.fasta files against the swissprot, trembl and ncbi nr databases in that order
-# retaining the blast hits that were < 1x10-5. Those that aren't matched at that level blast against the next db.
-rule blast_against_swiss_prot:
-	input:
-		query_fasta = "trinity_assembly/{species}/{sra}_trinity.Trinity.long_iso_only.fasta",
-		made_db_path = "db/swiss_prot/uniprot_sprot.psq"
-	output:
-		"blast_matches/swiss_prot/{species}/{sra}_sp_blast.out.txt"
-	threads:6
-	shell:
-		"blastx -query {input.query_fasta} -out {output} -db db/swiss_prot/uniprot_sprot -num_threads {threads} -outfmt 6 -evalue 1e-5"
-
-# Perform additional blasts if required (i.e. if not all transcripts had a hit. And then create a blast.out.txt that
-# is the consolidation of the (upto) 3 blast searches and put in separate directory
-#NB this is taking so long that we will abandon doing it for the time being and see if we can
-# move forward with the dnds predictions without annotations.
-rule additional_blasts:
-	# Must ensure that the initial swiss prot blast has been conducted
-	# Must also ensure that the other two databases are available
-	input:
-		swiss_prot_blast_output = "blast_matches/swiss_prot/{species}/{sra}_sp_blast.out.txt",
-		long_iso_only_transcript_fasta = "trinity_assembly/{species}/{sra}_trinity.Trinity.long_iso_only.fasta",
-		trembl_db_item_path = "db/trembl/uniprot_trembl.pal",
-		ncbi_db_item_path = "db/ncbi_nr/nr.pal"
-	threads:24 #TODO change this back to 6 when running for real
-	output:
-		consolidated_blast_out_results = "blast_matches/{species}_consolidated/{sra}_consolidated_blast.out.txt"
-	conda:
-		"envs/strain_deg.yaml"
-	shell:
-		"python3.6 scripts/additional_blasts.py {input.swiss_prot_blast_output} {input.long_iso_only_transcript_fasta} "
-		"db/trembl/uniprot_trembl db/ncbi_nr/nr "
-		"blast_matches/trembl/{wildcards.species}/{wildcards.sra}_trembl_blast.out.txt "
-		"blast_matches/ncbi_nr/{wildcards.species}/{wildcards.sra}_ncbi_nr_blast.out.txt "
-		"{output.consolidated_blast_out_results} "
-		"blast_matches/trembl/{wildcards.species}/{wildcards.sra}_trembl_no_match_blast_in.fasta "
-		"blast_matches/ncbi_nr/{wildcards.species}/{wildcards.sra}_ncbi_nr_no_match_blast_in.fasta {threads} "
-        "{wildcards.species} {wildcards.sra}"
 
 # We will use transdecoder to predict ORFs
 rule orf_prediction:
 	input:
 		"trinity_assembly/{species}/{sra}_trinity.Trinity.long_iso_only.fasta"
 	output:
-		"orf_prediction/{species}/{sra}/base_freqs.dat",
-		"orf_prediction/{species}/{sra}/longest_orfs.cds",
-		"orf_prediction/{species}/{sra}/longest_orfs.gff3",
-		"orf_prediction/{species}/{sra}/longest_orfs.pep"
+		"orf_prediction/{species}/{sra}/longest_iso_orfs.pep"
 	shell:
 		"TransDecoder.LongOrfs -t {input} -O orf_prediction/{wildcards.species}/{wildcards.sra}"
+
+# The transdecoder output can have multiple ORFs predicted per transcript
+# We will once again only keep one representative per transcript and work with this for the
+# ortholog prediction
+rule remove_multi_orfs_from_pep:
+    input:
+        "orf_prediction/{species}/{sra}/longest_iso_orfs.pep"
+    output:
+        "orf_prediction/{species}/{sra}/longest_iso_orfs.single_orf.pep"
+    conda:
+        "envs/strain_deg.yaml"
+    shell:
+        "python3.6 scripts/unique_orfs_from_pep.py {input} {output}"
 
 # TODO consider whether we should be working with only a single ORF per transcript or we work with multiple
 # To start with, we'll work with all ORFs and then revert back to selecting a single orthologous orf
@@ -326,3 +231,112 @@ rule tester:
 		 "envs/inparanoid.yaml"
 	shell:
 		 "sonicparanoid -h"
+
+
+# ANNOTATION
+rule get_swiss_prot_db:
+	output:
+		"db/swiss_prot/uniprot_sprot.fasta.gz"
+	shell:
+		"wget -O {output} ftp://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz"
+
+rule get_trembl_db:
+	output:
+		"db/trembl/uniprot_trembl.fasta.gz"
+	shell:
+		"wget -O {output} ftp://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_trembl.fasta.gz"
+
+rule get_ncbi_nr_db:
+	output:
+		"nr.fasta"
+	shell:
+		"bash breviolum_transcriptomes/db/ncbi_nr/update_blastdb_wrapper.sh"
+
+rule get_uni_prot_goa_db:
+	output:
+		"db/uniprot_goa/goa_uniprot_all.gaf.gz"
+	shell:
+		"wget -O {output} ftp://ftp.ebi.ac.uk/pub/databases/GO/goa/UNIPROT/goa_uniprot_all.gaf.gz"
+
+rule gunzip_uni_prot_goa_db:
+	input:
+		"db/uniprot_goa/goa_uniprot_all.gaf.gz"
+	output:
+		"db/uniprot_goa/goa_uniprot_all.gaf"
+	shell:
+		"gunzip {input}"
+
+rule gunzip_swiss_prot_db:
+	input:
+		"db/swiss_prot/uniprot_sprot.fasta.gz"
+	output:
+		"db/swiss_prot/uniprot_sprot.fasta"
+	shell:
+		"gunzip {input}"
+
+rule gunzip_tremble_db:
+	input:
+		"db/trembl/uniprot_trembl.fasta.gz"
+	output:
+		"db/trembl/uniprot_trembl.fasta"
+	shell:
+		"gunzip {input}"
+
+rule make_swiss_prot_db:
+	input:
+		"db/swiss_prot/uniprot_sprot.fasta"
+	output:
+		"db/swiss_prot/uniprot_sprot.phr",
+		"db/swiss_prot/uniprot_sprot.pin",
+		"db/swiss_prot/uniprot_sprot.psq"
+	shell:
+		"makeblastdb -in {input} -out db/swiss_prot/uniprot_sprot -dbtype prot"
+
+rule make_tremble_prot_db:
+	input:
+		"db/trembl/uniprot_trembl.fasta"
+	output:
+		"db/trembl/uniprot_trembl.phr",
+		"db/trembl/uniprot_trembl.pin",
+		"db/trembl/uniprot_trembl.psq"
+	shell:
+		"makeblastdb -in {input} -out db/trembl/uniprot_trembl -dbtype prot"
+
+# Blast each of the .long_iso_only.fasta files against the swissprot, trembl and ncbi nr databases in that order
+# retaining the blast hits that were < 1x10-5. Those that aren't matched at that level blast against the next db.
+rule blast_against_swiss_prot:
+	input:
+		query_fasta = "trinity_assembly/{species}/{sra}_trinity.Trinity.long_iso_only.fasta",
+		made_db_path = "db/swiss_prot/uniprot_sprot.psq"
+	output:
+		"blast_matches/swiss_prot/{species}/{sra}_sp_blast.out.txt"
+	threads:6
+	shell:
+		"blastx -query {input.query_fasta} -out {output} -db db/swiss_prot/uniprot_sprot -num_threads {threads} -outfmt 6 -evalue 1e-5"
+
+# Perform additional blasts if required (i.e. if not all transcripts had a hit. And then create a blast.out.txt that
+# is the consolidation of the (upto) 3 blast searches and put in separate directory
+#NB this is taking so long that we will abandon doing it for the time being and see if we can
+# move forward with the dnds predictions without annotations.
+rule additional_blasts:
+	# Must ensure that the initial swiss prot blast has been conducted
+	# Must also ensure that the other two databases are available
+	input:
+		swiss_prot_blast_output = "blast_matches/swiss_prot/{species}/{sra}_sp_blast.out.txt",
+		long_iso_only_transcript_fasta = "trinity_assembly/{species}/{sra}_trinity.Trinity.long_iso_only.fasta",
+		trembl_db_item_path = "db/trembl/uniprot_trembl.pal",
+		ncbi_db_item_path = "db/ncbi_nr/nr.pal"
+	threads:24 #TODO change this back to 6 when running for real
+	output:
+		consolidated_blast_out_results = "blast_matches/{species}_consolidated/{sra}_consolidated_blast.out.txt"
+	conda:
+		"envs/strain_deg.yaml"
+	shell:
+		"python3.6 scripts/additional_blasts.py {input.swiss_prot_blast_output} {input.long_iso_only_transcript_fasta} "
+		"db/trembl/uniprot_trembl db/ncbi_nr/nr "
+		"blast_matches/trembl/{wildcards.species}/{wildcards.sra}_trembl_blast.out.txt "
+		"blast_matches/ncbi_nr/{wildcards.species}/{wildcards.sra}_ncbi_nr_blast.out.txt "
+		"{output.consolidated_blast_out_results} "
+		"blast_matches/trembl/{wildcards.species}/{wildcards.sra}_trembl_no_match_blast_in.fasta "
+		"blast_matches/ncbi_nr/{wildcards.species}/{wildcards.sra}_ncbi_nr_no_match_blast_in.fasta {threads} "
+        "{wildcards.species} {wildcards.sra}"
