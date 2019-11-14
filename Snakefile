@@ -178,7 +178,7 @@ rule orthology_sonic_paranoid:
 	log:
 		"logs/sonicparanoid.log"
 	conda:
-		"envs/inparanoid.yaml"
+		"envs/sonicparanoid.yaml"
 	threads:24
 	shell:
 		"sonicparanoid -i sonicparanoid -o sonicparanoid/output -p parkinson -t {threads}"
