@@ -122,7 +122,7 @@ rule remove_multi_orfs_from_pep:
     conda:
         "envs/python_scripts.yaml"
     shell:
-        "python3.6 scripts/unique_orfs_from_pep.py {input} {output}"
+        "python3.7 scripts/unique_orfs_from_pep.py {input} {output}"
 
 
 def copy_pep_files():

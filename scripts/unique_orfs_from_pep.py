@@ -13,7 +13,11 @@ class unique_orfs:
 
 
         # populate the orf_dd dict
+        tot_len = len(self.pep_file)
+        count = 0
         for seq_rec in self.pep_file:
+            count += 1
+            sys.stdout.write(f'\r{((count/tot_len)*100):.2f} percent complete')
             elements = seq_rec.description.split(' ')
             transcript_id = elements[0].split('.')[0]
             print(f'populating dd dict with {transcript_id}')
@@ -24,6 +28,7 @@ class unique_orfs:
                 complete = False
             length = int(elements[2].split(':')[1])
             orf_dd_list[transcript_id].append(ORF(complete=complete, length=length, record=seq_rec))
+
 
         # Now for each of the gene ids, choose the longest complete ORF
         # If there is not a complete orf just take the longest
