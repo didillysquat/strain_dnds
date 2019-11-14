@@ -13,3 +13,7 @@ db/
 pycharm_parameters_additional_blasts
 trinity_assembly/
 wget-log
+orf_prediction/
+sonicparanoid/
+sonicparanoid_env/
+sonicparanoid_out/
