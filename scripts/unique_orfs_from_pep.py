@@ -20,7 +20,6 @@ class unique_orfs:
             sys.stdout.write(f'Populating the orf dict: \r{((count/tot_len)*100):.2f} percent complete')
             elements = seq_rec.description.split(' ')
             transcript_id = elements[0].split('.')[0]
-            print(f'populating dd dict with {transcript_id}')
             completeness = elements[1].split(':')[1]
             if completeness == 'complete':
                 complete = True
