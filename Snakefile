@@ -120,7 +120,7 @@ rule remove_multi_orfs_from_pep:
     output:
         "orf_prediction/{species}/{sra}/longest_iso_orfs.single_orf.pep"
     conda:
-        "envs/strain_deg.yaml"
+        "envs/python_scripts.yaml"
     shell:
         "python3.6 scripts/unique_orfs_from_pep.py {input} {output}"
 
