@@ -180,9 +180,12 @@ dependencies:
 # what this folder is called and rename it to parkinson after deleting any previous runs.
 # This way the output will always be the same name i.e.:
 # sonicparanoid/output/runs/parkinson/ortholog_groups/ortholog_groups.tsv
+def expand_for_sonic(wildcards):
+    return [f"sonicparanoid/{wildcards.species}/{sra}_longest_iso_orfs.single_orf.pep" for sra in sra_dict[{wildcards.species}]]
+
 rule orthology_sonic_paranoid:
 	input:
-		expand("sonicparanoid/{species}/{sra}_longest_iso_orfs.single_orf.pep", sra=sra_dict[{species}]),
+		expand_for_sonic()
 	output:
 		"sonicparanoid/{species}/output/runs/parkinson/ortholog_groups/ortholog_groups.tsv"
 	conda:
