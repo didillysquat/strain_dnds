@@ -188,7 +188,7 @@ rule orthology_sonic_paranoid:
 		"envs/sonicparanoid.yaml"
 	threads:24
 	shell:
-		"python3 scripts/sonicparanoid.py"
+		"python3 scripts/sonicparanoid.py {threads}"
 
 rule orthology_sonic_paranoid_slc:
 	input:
