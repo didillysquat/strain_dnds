@@ -8,8 +8,9 @@ import subprocess
 
 class ParanoidAnalysis:
     def __init__(self):
-        self.threads = str(sys.argv[1])
-        self.input_dir = os.path.abspath("sonicparanoid")
+        self.species = sys.argv[1]
+        self.threads = str(sys.argv[2])
+        self.input_dir = os.path.abspath(os.path.join("sonicparanoid", self.species))
         self.output_dir = os.path.join(self.input_dir, "output")
         self.runs_dir = os.path.join(self.output_dir, "runs")
         self.parkinson_dir = os.path.join(self.output_dir, "runs", "parkinson")
@@ -20,14 +21,14 @@ class ParanoidAnalysis:
         self._rename_run()
 
     def _del_previous_runs(self):
-        print("checking to see if sonicparanoid/output/runs/parkinson/ exists")
+        print(f"checking to see if {self.parkinson_dir} exists")
         if os.path.exists(self.parkinson_dir):
             print(f"{self.parkinson_dir} already exists")
             print('Deleting')
             shutil.rmtree(self.parkinson_dir)
             print("Done")
         else:
-            print("sonicparanoid/output/runs/parkinson/ does not exist")
+            print(f"{self.parkinson_dir} does not exist")
 
     def _run_sonicparanoid(self):
         print(f"Running sonicparanoid analysis with {self.threads} threads")

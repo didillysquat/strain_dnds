@@ -135,19 +135,21 @@ def copy_pep_files():
     for species_key, sra_list in sra_dict.items():
         for sra_val in sra_list:
             from_val = os.path.abspath(f'orf_prediction/{species_key}/{sra_val}/longest_iso_orfs.single_orf.pep')
-            to_val = os.path.abspath(f'sonicparanoid/{sra_val}_longest_iso_orfs.single_orf.pep')
+            to_val = os.path.abspath(f'sonicparanoid/{species_key}/{sra_val}_longest_iso_orfs.single_orf.pep')
             print(f'Copying {from_val} to {to_val}')
             subprocess.run(['cp', from_val, to_val])
 
 # sonic paranoid operates on a directory that contains all of the fastafiles that the orthologs will be predicted
 # from. So we need to create this directory and copy over the .pep files into this directory
+# At this point we should start to work on a species split again. I.e. four .pep files
+# per species
 rule copy_pep_files_for_sonicparanoid:
 	input:
 		expand("orf_prediction/b_minutum/{sra}/longest_iso_orfs.single_orf.pep", sra=sra_dict['b_minutum']),
 		expand("orf_prediction/b_psygmophilum/{sra}/longest_iso_orfs.single_orf.pep", sra=sra_dict['b_psygmophilum'])
 	output:
-		expand("sonicparanoid/{sra}_longest_iso_orfs.single_orf.pep", sra=sra_dict['b_minutum']),
-		expand("sonicparanoid/{sra}_longest_iso_orfs.single_orf.pep", sra=sra_dict['b_psygmophilum'])
+		expand("sonicparanoid/b_minutum/{sra}_longest_iso_orfs.single_orf.pep", sra=sra_dict['b_minutum']),
+		expand("sonicparanoid/b_psygmophilum/{sra}_longest_iso_orfs.single_orf.pep", sra=sra_dict['b_psygmophilum'])
 	run:
 		copy_pep_files()
 
@@ -180,15 +182,14 @@ dependencies:
 # sonicparanoid/output/runs/parkinson/ortholog_groups/ortholog_groups.tsv
 rule orthology_sonic_paranoid:
 	input:
-		expand("sonicparanoid/{sra}_longest_iso_orfs.single_orf.pep", sra=sra_dict['b_minutum']),
-		expand("sonicparanoid/{sra}_longest_iso_orfs.single_orf.pep", sra=sra_dict['b_psygmophilum'])
+		expand("sonicparanoid/{species}/{sra}_longest_iso_orfs.single_orf.pep", sra=sra_dict[{species}]),
 	output:
-		"sonicparanoid/output/runs/parkinson/ortholog_groups/ortholog_groups.tsv"
+		"sonicparanoid/{species}/output/runs/parkinson/ortholog_groups/ortholog_groups.tsv"
 	conda:
 		"envs/sonicparanoid.yaml"
 	threads:24
 	shell:
-		"python3 scripts/sonicparanoid.py {threads}"
+		"python3 scripts/sonicparanoid.py {wildcards.species} {threads}"
 
 rule orthology_sonic_paranoid_slc:
 	input:
