@@ -169,6 +169,15 @@ dependencies:
   - pip:
       - sonicparanoid==1.2.6
 """
+
+# To overcome the error that we are getting above we are going to use a python script instead of running
+# straight on the command line. For some reason when we use the arguent -p that should provide a run name
+# for the sonic paranoid analysis it is telling us that this has already been used. This only happens when
+# running it from within snakemake. So, to get over this we will run it without providing a run name
+# this way sonic paranoid will create a folder name from the current date time somehow. We will check
+# what this folder is called and rename it to parkinson after deleting any previous runs.
+# This way the output will always be the same name i.e.:
+# sonicparanoid/output/runs/parkinson/ortholog_groups/ortholog_groups.tsv
 rule orthology_sonic_paranoid:
 	input:
 		expand("sonicparanoid/{sra}_longest_iso_orfs.single_orf.pep", sra=sra_dict['b_minutum']),
@@ -179,6 +188,7 @@ rule orthology_sonic_paranoid:
 		"envs/sonicparanoid.yaml"
 	threads:24
 	shell:
+		"python3 scripts/sonicparanoid.py"
 		"sonicparanoid -i sonicparanoid -o sonicparanoid/output -p parkinson -t {threads}"
 
 rule orthology_sonic_paranoid_slc:
