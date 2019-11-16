@@ -207,17 +207,17 @@ rule orthology_sonic_paranoid_slc:
 		"sonicparanoid -i sonicparanoid -o sonicparanoid_out -t {threads} -slc"
 		# "python3 scripts/install_and_run_sonicparanoid.py"
 
-# Use the output from sonicparanoid to extract those ortholog groups that contain all 8 of the strains
+# Use the output from sonicparanoid to extract those ortholog groups that contain all four within
+# species strains with just one transcript per ortholog group.
 # Also make sure that we only have one ortholog per transcript.
 # The output of this will be in the same format as the input
 rule extract_unique_cross_strain_orthologs:
 	input:
-		input_one="sonicparanoid/output/runs/parkinson/ortholog_groups/ortholog_groups.tsv",
-		input_two="sonicparanoid/output/runs/parkinson/ortholog_groups/single-copy_groups.tsv"
+		"sonicparanoid/{species}/output/runs/parkinson/ortholog_groups/single-copy_groups.tsv"
 	output:
-		"screened_orthologs/screened_orthologs.tsv"
+		"screened_orthologs/{species}/screened_orthologs.tsv"
 	shell:
-		"python3.6 scripts/screen_orthologs.py {input.input_one} {input.input_two} {output}"
+		"python3.6 scripts/screen_orthologs.py {input} {output}"
 
 rule tester:
 	output:
