@@ -189,7 +189,6 @@ rule orthology_sonic_paranoid:
 	threads:24
 	shell:
 		"python3 scripts/sonicparanoid.py"
-		"sonicparanoid -i sonicparanoid -o sonicparanoid/output -p parkinson -t {threads}"
 
 rule orthology_sonic_paranoid_slc:
 	input:
