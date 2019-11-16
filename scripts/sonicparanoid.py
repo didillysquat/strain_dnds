@@ -8,7 +8,7 @@ import subprocess
 
 class ParanoidAnalysis:
     def __init__(self):
-        self.threads = int(sys.argv[1])
+        self.threads = str(sys.argv[1])
         self.input_dir = os.path.abspath("sonicparanoid")
         self.output_dir = os.path.join(self.input_dir, "output")
         self.runs_dir = os.path.join(self.output_dir, "runs")
