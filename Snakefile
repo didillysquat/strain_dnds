@@ -181,16 +181,16 @@ dependencies:
 # This way the output will always be the same name i.e.:
 # sonicparanoid/output/runs/parkinson/ortholog_groups/ortholog_groups.tsv
 def expand_for_sonic(wildcards):
-    return [f"sonicparanoid/{wildcards.species}/{sra}_longest_iso_orfs.single_orf.pep" for sra in sra_dict[{wildcards.species}]]
+    return [f"sonicparanoid/{wildcards.species}/{sra}_longest_iso_orfs.single_orf.pep" for sra in sra_dict[wildcards.species]]
 
 rule orthology_sonic_paranoid:
 	input:
-		expand_for_sonic()
+		expand_for_sonic
 	output:
 		"sonicparanoid/{species}/output/runs/parkinson/ortholog_groups/ortholog_groups.tsv"
 	conda:
 		"envs/sonicparanoid.yaml"
-	threads:24
+	threads:12
 	shell:
 		"python3 scripts/sonicparanoid.py {wildcards.species} {threads}"
 
