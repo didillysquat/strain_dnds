@@ -134,8 +134,8 @@ def copy_pep_files():
     # now copy over each of the files
     for species_key, sra_list in sra_dict.items():
         for sra_val in sra_list:
-            from_val = os.path.abspath(f'orf_prediction/{species_key}/{sra_val}/longest_orfs.pep')
-            to_val = os.path.abspath(f'sonicparanoid/{sra_val}_longest_orfs.pep')
+            from_val = os.path.abspath(f'orf_prediction/{species_key}/{sra_val}/longest_iso_orfs.single_orf.pep')
+            to_val = os.path.abspath(f'sonicparanoid/{sra_val}_longest_iso_orfs.single_orf.pep')
             print(f'Copying {from_val} to {to_val}')
             subprocess.run(['cp', from_val, to_val])
 
