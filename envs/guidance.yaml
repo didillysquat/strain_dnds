@@ -1,0 +1,4 @@
+channels:
+  - genomedk
+dependencies:
+  - guidance=2.02

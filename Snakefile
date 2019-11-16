@@ -107,9 +107,21 @@ rule orf_prediction:
 	input:
 		"trinity_assembly/{species}/{sra}_trinity.Trinity.long_iso_only.fasta"
 	output:
-		"orf_prediction/{species}/{sra}/longest_iso_orfs.pep"
+		"orf_prediction/{species}/{sra}/longest_orfs.pep",
+		"orf_prediction/{species}/{sra}/longest_orfs.cds"
 	shell:
 		"TransDecoder.LongOrfs -t {input} -O orf_prediction/{wildcards.species}/{wildcards.sra}"
+
+# rename the longest_orfs files to longest_iso_orfs.XXX
+rule rename_longest_orf_files:
+	input:
+		pep="orf_prediction/{species}/{sra}/longest_orfs.pep",
+		cds="orf_prediction/{species}/{sra}/longest_orfs.cds"
+	output:
+		pep="orf_prediction/{species}/{sra}/longest_iso_orfs.pep",
+		cds="orf_prediction/{species}/{sra}/longest_iso_orfs.cds"
+	shell:
+		"mv {input.pep} {output.pep}; mv {input.cds} {output.cds}"
 
 # The transdecoder output can have multiple ORFs predicted per transcript
 # We will once again only keep one representative per transcript and work with this for the
@@ -194,18 +206,6 @@ rule orthology_sonic_paranoid:
 	shell:
 		"python3 scripts/sonicparanoid.py {wildcards.species} {threads}"
 
-rule orthology_sonic_paranoid_slc:
-	input:
-		expand("sonicparanoid/{sra}_longest_iso_orfs.single_orf.pep", sra=sra_dict['b_minutum']),
-		expand("sonicparanoid/{sra}_longest_iso_orfs.single_orf.pep", sra=sra_dict['b_psygmophilum'])
-	output:
-		"sonicparanoid_out/runs"
-	conda:
-		"envs/sonicparanoid.yaml"
-	threads:24
-	shell:
-		"sonicparanoid -i sonicparanoid -o sonicparanoid_out -t {threads} -slc"
-		# "python3 scripts/install_and_run_sonicparanoid.py"
 
 # Use the output from sonicparanoid to extract those ortholog groups that contain all four within
 # species strains with just one transcript per ortholog group.
@@ -216,17 +216,43 @@ rule extract_unique_cross_strain_orthologs:
 		"sonicparanoid/{species}/output/runs/parkinson/ortholog_groups/single-copy_groups.tsv"
 	output:
 		"screened_orthologs/{species}/screened_orthologs.tsv"
+	conda:
+		"envs/python_scripts.yaml"
 	shell:
 		"python3.6 scripts/screen_orthologs.py {input} {output}"
 
-rule tester:
-	output:
-		  "tester.txt"
-	conda:
-		 "envs/inparanoid.yaml"
-	shell:
-		 "sonicparanoid -h"
+# Now it is time to do the alignments
+# We will align using Guidance that will allow us to simultaneously
+# align sequences and remove uncertain columns
+# First step will be to create a directory for each of the ortholog groups. Then in each directory write out the
+# cds of the predicted pep
+def write_out_unaligned_cds_fastas_to_be_aligned_input(wildcards):
+	input_list = []
+	input_list.append(f"screened_orthologs/{wildcards.species}/screened_orthologs.tsv")
+	input_list.extend([f"orf_prediction/{wildcards.species}/{sra}/longest_iso_orfs.cds" for sra in sra_dict[wildcards.species]])
+	input_list.extend([f"orf_prediction/{wildcards.species}/{sra}/longest_iso_orfs.single_orf.pep" for sra in sra_dict[wildcards.species]])
 
+	return input_list
+
+rule write_out_unaligned_cds_fastas_to_be_aligned:
+	# We will need the screened_orthologs.tsv for each species and we will need the .cds files
+	# for the transdecoder ouputs that have been uniqued
+	input:
+		write_out_unaligned_cds_fastas_to_be_aligned_input
+	output:
+		directory("local_alignments/{species}")
+	conda:
+		"envs/python_scripts.yaml"
+	shell:
+		"python3 scripts/write_out_unaligned_cds_fastas.py {wildcards.species} {input[0]} {input[1]}"
+
+rule test:
+	output:
+		"test.txt"
+	conda:
+		"envs/guidance.yaml"
+	shell:
+		"which mafft"
 
 # ANNOTATION
 rule get_swiss_prot_db:

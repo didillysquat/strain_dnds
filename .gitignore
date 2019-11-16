@@ -18,3 +18,5 @@ sonicparanoid/
 sonicparanoid_env/
 sonicparanoid_out/
 logs/
+local_alignments/
+screened_orthologs/
