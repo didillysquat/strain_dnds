@@ -151,7 +151,7 @@ rule copy_pep_files_for_sonicparanoid:
 	run:
 		copy_pep_files()
 
-# We will do ortholog prediction using reciprocal blast.
+# Ortholog prediction
 # This was previously done using a combination of inparanoid and multiparanoid.
 # This is painstakingly slow and only runs using the old blast.
 # Instead we will use sonicparanoid that uses the same algorithms as inparanoid but
@@ -175,8 +175,6 @@ rule orthology_sonic_paranoid:
 		expand("sonicparanoid/{sra}_longest_iso_orfs.single_orf.pep", sra=sra_dict['b_psygmophilum'])
 	output:
 		"sonicparanoid/output/runs/parkinson/ortholog_groups/ortholog_groups.tsv"
-	log:
-		"logs/sonicparanoid.log"
 	conda:
 		"envs/sonicparanoid.yaml"
 	threads:24
