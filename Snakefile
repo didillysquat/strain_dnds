@@ -246,6 +246,17 @@ rule write_out_unaligned_cds_fastas_to_be_aligned:
 	shell:
 		"python3 scripts/write_out_unaligned_cds_fastas.py {wildcards.species} {input[0]} {input[1]}"
 
+#NB the conda version of guidance appears to be having severe compatability issues with both 
+# multiprocessing and the snakemake platform - not good.
+# Unfortunately the only way that I've been able to get this working is by manually activating the
+# conda environment in which guidance and python are installed and then running the python 
+# script align_local_cds_fastas.py by hand.
+# I also tried to use the compiled version of guidance but this seems to be having a bunch of issue with missing
+# perl libraries. Because I am bleeding time on this I am going to do this manually.
+# The other problem is that guidance does seem to do random error messages. But if you redo a given orth
+# group it will generally work fine. So for the time being I've set up the below script so that it will
+# skip over any of the orth groups that failed in the guidance analysis and then we will jut run this script
+# again to try to re-do only the orth groups for which the aa alignment was not produced.
 rule align_local_cds_fastas:
 	input:
 		"local_alignments/{species}/unaligned_fastas_summary.readme"
@@ -256,14 +267,48 @@ rule align_local_cds_fastas:
 		"envs/guidance.yaml"
 	shell:
 		"python3 scripts/align_local_cds_fastas.py {wildcards.species} {input} {threads}"
+
+rule run_protein_models:
+	input:
+		"local_alignments/{species}/guidance_aligned_fastas_summary.readme"
+	output:
+		"local_alignments/{species}/protein_models_summary.txt"
+	conda:
+		"envs/python_scripts.yaml"
+	shell:
+		"python3 scripts/do_prottest.py {wildcards.species}"
+
+rule make_concatenated_aa_alignment:
+	input:
+		"local_alignments/{species}/protein_models_summary.txt"
+	output:
+		fasta="concatenated_alignment/{species}/master_alignment.fasta",
+		q_file="concatenated_alignment/{species}/q_file.q"
+	conda:
+		"envs/python_scripts.yaml"
+	shell:
+		"python3 scripts/make_master_alignment.py {wildcards.species} {output.fasta} {output.q_file}"
 	
+rule make_tree:
+	input:
+		fasta="concatenated_alignment/{species}/master_alignment.fasta",
+		q_file="concatenated_alignment/{species}/q_file.q"
+	output:
+		"master_tree/{species}/master_tree.tree"
+	conda:
+		"envs/raxml.yaml"
+	shell:
+		"raxmlHPC-PTHREADS-AVX2 -s {input.fasta} -q {input.q_file} -x"
+		" 183746 -f a, -p 83746273 -# 1000 -T 20 -n strain_dn_ds -m PROTGAMMAWAG -w "
+		"/home/humebc/projects/parky/breviolum_transcriptomes/master_tree"
+
 rule test:
 	output:
 		"test.txt"
 	conda:
-		"envs/python_scripts.yaml"
+		"envs/raxml.yaml"
 	shell:
-		"which mafft"
+		"which raxml"
 
 # ANNOTATION
 rule get_swiss_prot_db:

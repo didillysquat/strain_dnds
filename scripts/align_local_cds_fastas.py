@@ -9,9 +9,9 @@ import shutil
 class GAlign:
     def __init__(self):
         self.species = sys.argv[1]
-        subprocess.run(['which', 'guidance'])
-        self.base_alignment_dir = os.path.dirname(sys.argv[2])
-        self.threads = int(sys.argv[3])
+        print(f'argvs 1 = {sys.argv[1]}')
+        self.base_alignment_dir = os.path.join('/home/humebc/projects/parky/breviolum_transcriptomes/local_alignments', self.species)
+        self.threads = 10
         # self.threads = int(sys.argv[3])
         self.mp_queue = Queue()
         self.list_of_unaligned_fasta_paths = []
