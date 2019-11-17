@@ -302,6 +302,16 @@ rule make_tree:
 		" 183746 -f a, -p 83746273 -# 1000 -T 20 -n strain_dn_ds -m PROTGAMMAWAG -w "
 		"/home/humebc/projects/parky/breviolum_transcriptomes/master_tree"
 
+rule make_codeml_blocks:
+	input:
+		"master_tree/{species}/master_tree.tree"
+	output:
+		"codeml_blocks/codeml_summary.txt"
+	conda:
+		"envs/python_scripts.yaml"
+	shell:
+		"python3 scripts/codeml.py {output}"
+
 rule test:
 	output:
 		"test.txt"

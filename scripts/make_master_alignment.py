@@ -101,15 +101,4 @@ class MasterAlignment:
             for line in q_file:
                 f.write('{}\n'.format(line))
 
-        # now run raxml
-        # NB note that although we are specificing mdels for each partition, we still need to add the PROTGAMMAIWAG
-        # model argument to the -m flag. This is just a weird operation of raxml and is explained but hidden in the manual
-        # (search for 'If you want to do a partitioned analysis of concatenated'). Raxml will only extract the rate
-        # variation information from this and will ignore the model component e.g. WAG. FYI any model could be used
-        # doesn't have to be WAG.
-        raxml_path = '/home/humebc/phylogeneticsSoftware/raxml/standard-RAxML/raxmlHPC-PTHREADS-AVX'
-        subprocess.run([raxml_path, '-s', master_fasta_output_path, '-q', q_file_output_path,
-                        '-x', '183746', '-f', 'a', '-p', '83746273', '-#', '1000', '-T', '8', '-n', 'parkinson_out',
-                        '-m', 'PROTGAMMAWAG', '-w', '/home/humebc/projects/parky/aa_tree_creation'])
-
-        print('\nConstruction of master fasta complete:\n{}\n{}'.format(master_fasta_output_path, q_file_output_path))
+        
