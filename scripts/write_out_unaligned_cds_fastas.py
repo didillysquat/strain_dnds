@@ -17,6 +17,7 @@ class WriteOutFastas:
         # it will be a nested dict so that first key is strain and second it transcript name
         self.transcript_name_to_seq_dict = {}
         self._init_transcript_name_to_seq_dict()
+        self.non_three_orth_groups = []
 
     def _init_transcript_name_to_seq_dict(self):
         print("Creating transcript name to cds sequence mapping")
@@ -32,14 +33,27 @@ class WriteOutFastas:
     def write_out_fasta(self):
         # We will work through the orth_df and write
         print("writing out local unaligned local fastas")
+
         for ind, ser in self.orth_df.iterrows():
             sys.stdout.write(f"\r{ind}")
             orth_group_output_dir = os.path.join(self.output_path, str(ind))
             orth_group_unaligned_fasta_path = os.path.join(orth_group_output_dir, f'{ind}_unaligned_cds.fasta')
-            os.makedirs(orth_group_output_dir, exist_ok=True)
+            if ind == 12175:
+                foo = 'bar'
             fasta = []
+            non_three = False
             for strain_name in self.strain_names:
-                fasta.extend([f'>{ind}_{strain_name}', self.transcript_name_to_seq_dict[strain_name][ser[strain_name]]])
+                # check to make sure that the seq is divisble by three
+                seq_str = self.transcript_name_to_seq_dict[strain_name][ser[strain_name]]
+                if len(seq_str) == 0:
+                    foo = 'bar'
+                if (len(seq_str)%3) != 0:
+                    non_three = True
+                fasta.extend([f'>{ind}_{strain_name}', seq_str])
+            if non_three:
+                self.non_three_orth_groups.append(str(ind))
+                continue
+            os.makedirs(orth_group_output_dir, exist_ok=True)
             with open(orth_group_unaligned_fasta_path, 'w') as f:
                 for line in fasta:
                     f.write(f'{line}\n')
@@ -49,8 +63,9 @@ class WriteOutFastas:
     def _write_out_summary_file(self):
         # We will write out a summary file so that we have an output for the snakemake to grab hold of
         print("Writing out summary file")
-        with open(os.path.join(self.orf_prediction_dir, "unaligned_fastas_summary.readme"), 'w') as f:
-            f.write("done\n")
+        with open(os.path.join(self.output_path, "unaligned_fastas_summary.readme"), 'w') as f:
+            f.write(f"There were {len(self.non_three_orth_groups)} groups containing at least one "
+                    f" sequence that was not divisible by three\n")
 
 wof = WriteOutFastas()
 wof.write_out_fasta()

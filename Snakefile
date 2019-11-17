@@ -251,17 +251,17 @@ rule align_local_cds_fastas:
 		"local_alignments/{species}/unaligned_fastas_summary.readme"
 	output:
 		"local_alignments/{species}/guidance_aligned_fastas_summary.readme"
-	threads: 24
+	threads: 10
 	conda:
 		"envs/guidance.yaml"
 	shell:
-		"python3 align_local_cds_fastas.py {wildcards.species} {input} {threads}"
+		"python3 scripts/align_local_cds_fastas.py {wildcards.species} {input} {threads}"
 	
 rule test:
 	output:
 		"test.txt"
 	conda:
-		"envs/guidance.yaml"
+		"envs/python_scripts.yaml"
 	shell:
 		"which mafft"
 

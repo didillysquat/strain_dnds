@@ -4,6 +4,7 @@ from multiprocessing import Queue, Process
 import ntpath
 import subprocess
 import pandas as pd
+import shutil
 
 class GAlign:
     def __init__(self):
@@ -11,6 +12,7 @@ class GAlign:
         subprocess.run(['which', 'guidance'])
         self.base_alignment_dir = os.path.dirname(sys.argv[2])
         self.threads = int(sys.argv[3])
+        # self.threads = int(sys.argv[3])
         self.mp_queue = Queue()
         self.list_of_unaligned_fasta_paths = []
         self._populate_list_of_unaligned_fasta_paths()
@@ -54,11 +56,14 @@ class GAlign:
         for _ in range(self.threads):
             self.mp_queue.put('STOP')
 
+        # a queue for putting the orth groups that failed the guidance analysis to be retried
+        self.retry_queue = Queue()
+
         all_processes = []
 
         # Then start the workers
         for _ in range(self.threads):
-            p = Process(target=self._guidance_worker, args=(self.mp_queue,))
+            p = Process(target=self._guidance_worker, args=(self.mp_queue,self.retry_queue))
             all_processes.append(p)
             p.start()
 
@@ -69,12 +74,21 @@ class GAlign:
         with open(os.path.join(self.base_alignment_dir, "guidance_aligned_fastas_summary.readme"), 'w') as f:
             f.write('DONE\n')
     
-    def _guidance_worker(self, input_queue):
+    def _guidance_worker(self, input_queue, output_queue):
         for input_fasta_path in iter(input_queue.get, 'STOP'):
             sys.stdout.write(f'\rPerforming Guidance alignment for {ntpath.basename(input_fasta_path)}')
             gw = GuidanceWorker(input_fasta_path, self.guidance_perl_script_full_path)
-            gw._exe_guidance_analysis()
-            gw._drop_low_qual_cols_and_crop()
+            if not os.path.exists(gw.aa_aligned_and_cropped_path):
+                try:
+                    gw._exe_guidance_analysis()
+                    gw._drop_low_qual_cols_and_crop()
+                except:
+                    # delete the guidance output folder and add this to a list to retry
+                    shutil.rmtree(gw.output_dir)
+                    output_queue.put(gw.orth_group_id)
+            else:
+                print(f'\n{gw.aa_aligned_and_cropped_path} already exists, skipping this orth_group')
+
 
 class GuidanceWorker:
     def __init__(self, input_fasta_path, guidance_perl_script_path):
@@ -105,16 +119,16 @@ class GuidanceWorker:
         #      '--seqType', 'codon', '--outDir', self.output_fasta_path, '--bootstraps', '10',
         #      '--outOrder', 'as_input', '--colCutoff', '0.6', '--dataset', self.orth_group_id]
         #     , stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if os.path.exists(self.output_dir):
-            print(f"{self.output_dir} already exists, skipping guidance analysis")
-            return
+        # if os.path.exists(self.output_dir):
+        #     print(f"{self.output_dir} already exists, skipping guidance analysis")
+        #     return
         print(['perl', self.guidance_perl_script_path, '--seqFile', self.input_fasta_path, '--msaProgram', 'MAFFT',
              '--seqType', 'codon', '--outDir', self.output_dir, '--bootstraps', '10',
-             '--outOrder', 'as_input', '--colCutoff', '0.6', '--dataset', self.orth_group_id])
+             '--outOrder', 'as_input', '--colCutoff', '0.6', '--dataset', self.orth_group_id, '--proc_num', '1'])
         subprocess.run(
             ['perl', self.guidance_perl_script_path, '--seqFile', self.input_fasta_path, '--msaProgram', 'MAFFT',
              '--seqType', 'codon', '--outDir', self.output_dir, '--bootstraps', '10',
-             '--outOrder', 'as_input', '--colCutoff', '0.6', '--dataset', self.orth_group_id])
+             '--outOrder', 'as_input', '--colCutoff', '0.6', '--dataset', self.orth_group_id, '--proc_num', '1'])
         foo = 'bar'
 
     def _get_seq_names_from_fasta(self):
