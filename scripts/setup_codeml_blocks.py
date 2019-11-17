@@ -7,7 +7,7 @@ class CODEML:
         self.species = sys.argv[1]
         self.base_input_dir = os.path.join(
             '/home/humebc/projects/parky/breviolum_transcriptomes/local_alignments', self.species)
-        self.output_dir = '/home/humebc/projects/parky/breviolum_transcriptomes/local_alignments'
+        self.output_dir = os.path.join('/home/humebc/projects/parky/breviolum_transcriptomes/codeml', self.species)
         os.makedirs(self.output_dir, exist_ok=True)
         self.list_of_orth_group_dirs = list(os.walk(self.base_input_dir))[0][1]
         self.bad_dir_list = []
@@ -15,9 +15,10 @@ class CODEML:
         self.counter = 0
         # counter for keeping track of which block we are on
         self.block_counter = 0
-        # I dont know what this is used for yet
+        # This is a list of the tuples that contain the paths to the blocks and info needed
+        # to run the codeml analysis
         self.list_of_guidance_dirs = []
-        self.summary_file_path = sys.argv[1]
+        self.block_info_pickle_out_path = sys.argv[2]
         self.phylip_alignment = []
 
 
@@ -73,8 +74,7 @@ class CODEML:
         # now write out the final block of alignments
         seq_file_ctrl_file_tup = self.write_out_cntrl_and_seq_file(self.block_counter, self.output_dir, self.phylip_alignment, num_align=len(self.list_of_orth_group_dirs)-len(self.bad_dir_list)-(1000*(self.block_counter-1)))
         self.list_of_guidance_dirs.append(seq_file_ctrl_file_tup)
-
-        pickle.dump(self.list_of_guidance_dirs, open('{}/list_of_guidance_dirs.pickle'.format(self.output_dir), "wb" ))
+        pickle.dump(self.list_of_guidance_dirs, open(self.block_info_pickle_out_path, "wb" ))
 
     def generate_phylip_from_fasta(self, orth_grp_id):
         temp_str = str()

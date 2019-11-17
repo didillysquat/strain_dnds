@@ -306,11 +306,21 @@ rule make_codeml_blocks:
 	input:
 		"master_tree/{species}/master_tree.tree"
 	output:
-		"codeml_blocks/codeml_summary.txt"
+		"codeml/{species}/list_of_guidance_dirs.pickle"
 	conda:
 		"envs/python_scripts.yaml"
 	shell:
-		"python3 scripts/codeml.py {output}"
+		"python3 scripts/setup_codeml_blocks.py {wildcards.species} {output} {input}"
+
+rule run_codeml:
+	input:
+		"codeml/{species}/list_of_guidance_dirs.pickle"
+	output:
+		"codeml/{species}/codeml_run_summary.txt"
+	conda:
+		"envs/codeml.yaml"
+	shell:
+		"python3 scripts/run_codeml.py {species} {output}"
 
 rule test:
 	output:
