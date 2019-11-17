@@ -240,12 +240,23 @@ rule write_out_unaligned_cds_fastas_to_be_aligned:
 	input:
 		write_out_unaligned_cds_fastas_to_be_aligned_input
 	output:
-		directory("local_alignments/{species}")
+		"local_alignments/{species}/unaligned_fastas_summary.readme"
 	conda:
 		"envs/python_scripts.yaml"
 	shell:
 		"python3 scripts/write_out_unaligned_cds_fastas.py {wildcards.species} {input[0]} {input[1]}"
 
+rule align_local_cds_fastas:
+	input:
+		"local_alignments/{species}/unaligned_fastas_summary.readme"
+	output:
+		"local_alignments/{species}/guidance_aligned_fastas_summary.readme"
+	threads: 24
+	conda:
+		"envs/guidance.yaml"
+	shell:
+		"python3 align_local_cds_fastas.py {wildcards.species} {input} {threads}"
+	
 rule test:
 	output:
 		"test.txt"

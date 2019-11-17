@@ -1,4 +1,7 @@
 channels:
   - genomedk
 dependencies:
+  - python=3.7.0
   - guidance=2.02
+  - pip:
+      - pandas

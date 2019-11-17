@@ -43,6 +43,14 @@ class WriteOutFastas:
             with open(orth_group_unaligned_fasta_path, 'w') as f:
                 for line in fasta:
                     f.write(f'{line}\n')
+        
+        self._write_out_summary_file()
+
+    def _write_out_summary_file(self):
+        # We will write out a summary file so that we have an output for the snakemake to grab hold of
+        print("Writing out summary file")
+        with open(os.path.join(self.orf_prediction_dir, "unaligned_fastas_summary.readme"), 'w') as f:
+            f.write("done\n")
 
 wof = WriteOutFastas()
 wof.write_out_fasta()
