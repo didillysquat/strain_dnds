@@ -52,7 +52,8 @@ class DoProttest:
 
     def _write_prottest_summary(self):
         with open(os.path.join(self.base_input_dir, 'protein_models_summary.txt'), 'w') as f:
-            f.write(f'{len(self.alignment_not_available_list)} alignments were not found in their respective directories')
+            f.write(f'{len(self.alignment_not_available_list)} '
+                    f'alignments were not found in their respective directories\n')
             f.write(
                 f'{self.bad_count} alignments were bad and prot model outputs were not produced')
 

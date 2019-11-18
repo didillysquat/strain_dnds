@@ -300,8 +300,8 @@ rule make_tree:
 		"envs/raxml.yaml"
 	shell:
 		"raxmlHPC-PTHREADS-AVX2 -s {input.fasta} -q {input.q_file} -x"
-		" 183746 -f a, -p 83746273 -# 1000 -T 20 -n strain_dn_ds -m PROTGAMMAWAG -w "
-		"/home/humebc/projects/parky/breviolum_transcriptomes/master_tree"
+		" 183746 -f a, -p 83746273 -# 1000 -T 10 -n strain_dn_ds -m PROTGAMMAWAG -w "
+		"/home/humebc/projects/parky/breviolum_transcriptomes/master_tree/{wildcards.species}"
 
 rule make_codeml_blocks:
 	input:

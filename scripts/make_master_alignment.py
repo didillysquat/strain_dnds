@@ -1,6 +1,7 @@
 from collections import defaultdict
 import sys
 import os
+import shutil
 
 class MasterAlignment:
     def __init__(self):
@@ -8,17 +9,20 @@ class MasterAlignment:
         self.base_input_dir = os.path.join(
             '/home/humebc/projects/parky/breviolum_transcriptomes/local_alignments', self.species)
         self.list_of_prottest_paths = []
-        self._populate_list_of_prottest_paths()
         self.list_of_prottest_files_not_found = []
+        self._populate_list_of_prottest_paths()
         self.master_fasta_out_path = sys.argv[2]
+        os.makedirs(os.path.dirname(self.master_fasta_out_path), exist_ok=True)
         self.q_file_out_path = sys.argv[3]
+        os.makedirs(os.path.dirname(self.q_file_out_path), exist_ok=True)
+        self.bad_prot_file_list = []
         
     def _populate_list_of_prottest_paths(self):
         list_of_orth_group_dirs = list(os.walk(self.base_input_dir))[0][1]
         print("Populating the list of prottest paths")
         for group_dir_name in list_of_orth_group_dirs:
             sys.stdout.write(f"\r{group_dir_name}")
-            path_to_prot_out_file = os.path.join(group_dir_name, '_prottest_result.out')
+            path_to_prot_out_file = os.path.join(self.base_input_dir, group_dir_name, f'{group_dir_name}_prottest_result.out')
             if os.path.exists(path_to_prot_out_file):
                 self.list_of_prottest_paths.append(path_to_prot_out_file)
             else:
@@ -44,6 +48,7 @@ class MasterAlignment:
         # we cannnot change the +G or +I for each partition. As such I will define according to the base model
         model_to_orth_dict = defaultdict(list)
         for protpath in self.list_of_prottest_paths:
+            sys.stdout.write(f'\r{protpath}')
             model = ''
             # orth_num = int(os.path.dirname(protpath).split('_')[0])
             with open(protpath, 'r') as f:
@@ -54,13 +59,18 @@ class MasterAlignment:
                     break
             if model == '':
                 # sys.exit('Model line not found in {}'.format(orth_num))
-                sys.exit('Model line not found in {}'.format(protpath))
+                self.bad_prot_file_list.append(protpath)
+                # sys.exit('Model line not found in {}'.format(protpath))
             model_to_orth_dict[model].append(protpath.replace('_prottest_result.out', '.cropped_aligned_aa.fasta'))
 
         # #N.B. that we cannot have different gamma for different partitions
         # # Also best advice is not to run +G and +I together.
         # # As such we only need to extract the base model here i.e. WAG rather than WAG [+G|+I]
         # for model in model_to_orth_dict
+
+        # delete the bad prot models and rerun the prottest to see if we can get them good.
+        # for bad_path in self.bad_prot_file_list:
+        #     os.remove(bad_path)
 
         print('The 19k sequences are best represented by {} different aa models'.format(len(model_to_orth_dict.keys())))
 
@@ -71,7 +81,10 @@ class MasterAlignment:
         # now go model by model in the sorted_model_list to make the master alignment.
 
         # not the most elegant way but I think I'll just create the master fasta in memory
-        master_fasta = ['>min', '', '>pmin', '', '>psyg', '', '>ppsyg', '']
+        if self.species == 'b_minutum':
+            master_fasta = ['>SRR1793320', '', '>SRR1793321', '', '>SRR1793322', '', '>SRR1793323', '']
+        elif self.species == 'b_psygmophilum':
+            master_fasta = ['>SRR1793324', '', '>SRR1793325', '', '>SRR1793326', '', '>SRR1793327', '']
 
         # The q file will hold the information for the partitioning of the alignment for the raxml analysis
         q_file = []
@@ -101,4 +114,5 @@ class MasterAlignment:
             for line in q_file:
                 f.write('{}\n'.format(line))
 
-        
+ma = MasterAlignment()
+ma.concatenate_local_alignment()
