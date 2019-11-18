@@ -275,8 +275,9 @@ rule run_protein_models:
 		"local_alignments/{species}/protein_models_summary.txt"
 	conda:
 		"envs/python_scripts.yaml"
+	threads: 4
 	shell:
-		"python3 scripts/do_prottest.py {wildcards.species}"
+		"python3 scripts/do_prottest.py {wildcards.species} {threads}"
 
 rule make_concatenated_aa_alignment:
 	input:
@@ -326,7 +327,7 @@ rule test:
 	output:
 		"test.txt"
 	conda:
-		"envs/raxml.yaml"
+		"envs/python_scripts.yaml"
 	shell:
 		"which raxml"
 

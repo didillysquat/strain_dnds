@@ -76,10 +76,10 @@ class GAlign:
     
     def _guidance_worker(self, input_queue, output_queue):
         for input_fasta_path in iter(input_queue.get, 'STOP'):
-            sys.stdout.write(f'\rPerforming Guidance alignment for {ntpath.basename(input_fasta_path)}')
             gw = GuidanceWorker(input_fasta_path, self.guidance_perl_script_full_path)
             if not os.path.exists(gw.aa_aligned_and_cropped_path):
                 try:
+                    sys.stdout.write(f'\rPerforming Guidance alignment for {ntpath.basename(input_fasta_path)}')
                     gw._exe_guidance_analysis()
                     gw._drop_low_qual_cols_and_crop()
                 except:
@@ -87,7 +87,7 @@ class GAlign:
                     shutil.rmtree(gw.output_dir)
                     output_queue.put(gw.orth_group_id)
             else:
-                print(f'\n{gw.aa_aligned_and_cropped_path} already exists, skipping this orth_group')
+                print(f'\nAlready exists: {gw.aa_aligned_and_cropped_path} , skipping this orth_group')
 
 
 class GuidanceWorker:
