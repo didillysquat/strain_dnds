@@ -306,13 +306,13 @@ rule make_tree:
 
 rule make_codeml_blocks:
 	input:
-		"master_tree/{species}/master_tree.tree"
+		"master_tree/{species}/RAxML_bestTree.strain_dn_ds"
 	output:
 		"codeml/{species}/list_of_guidance_dirs.pickle"
 	conda:
 		"envs/python_scripts.yaml"
 	shell:
-		"python3 scripts/setup_codeml_blocks.py {wildcards.species} {output} {input}"
+		"python3 scripts/setup_codeml_blocks.py {wildcards.species} {output}"
 
 rule run_codeml:
 	input:

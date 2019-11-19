@@ -46,7 +46,6 @@ class CODEML:
                 if self.block_counter != 0:
                     # then we already have a block that needs writing
                     seq_file_ctrl_file_tup = self.write_out_cntrl_and_seq_file(
-                        block_counter=self.block_counter, output_dir=self.output_dir,
                         phylip_alignment=self.phylip_alignment, num_align=1000)
                     self.list_of_guidance_dirs.append(seq_file_ctrl_file_tup)
                 # once the old block is written out start a new one
@@ -66,21 +65,21 @@ class CODEML:
                 # if the fasta was empty then log this and don't add anything to the counter
                 self.bad_dir_list.append(orth_dir)
 
-        # write out a list of the poor alignement orfs
-        with open(self.summary_file_path, 'w') as f:
-            for line in self.bad_dir_list:
-                f.write(f'{line}\n')
-
         # now write out the final block of alignments
-        seq_file_ctrl_file_tup = self.write_out_cntrl_and_seq_file(self.block_counter, self.output_dir, self.phylip_alignment, num_align=len(self.list_of_orth_group_dirs)-len(self.bad_dir_list)-(1000*(self.block_counter-1)))
+        seq_file_ctrl_file_tup = self.write_out_cntrl_and_seq_file(
+            phylip_alignment=self.phylip_alignment,
+            num_align=len(self.list_of_orth_group_dirs)-len(self.bad_dir_list)-(1000*(self.block_counter-1)))
         self.list_of_guidance_dirs.append(seq_file_ctrl_file_tup)
         pickle.dump(self.list_of_guidance_dirs, open(self.block_info_pickle_out_path, "wb" ))
 
     def generate_phylip_from_fasta(self, orth_grp_id):
         temp_str = str()
         temp_list = list()
+        aa_fasta_path = os.path.join(self.base_input_dir, orth_grp_id, f'{orth_grp_id}.cropped_aligned_aa.fasta')
+        if not os.path.exists(aa_fasta_path):
+            return False
 
-        with open(os.path.join(self.base_input_dir, orth_grp_id, f'{orth_grp_id}.cropped_aligned_aa.fasta'), 'r') as f:
+        with open(aa_fasta_path, 'r') as f:
             fasta_file = [line.rstrip() for line in f]
 
         if len(fasta_file[1]) == 0:
@@ -98,39 +97,46 @@ class CODEML:
             return temp_list
 
 
-    def write_out_cntrl_and_seq_file(self, block_counter, output_dir, phylip_alignment, num_align):
+    def write_out_cntrl_and_seq_file(self, phylip_alignment, num_align):
         # write out the control file specific to this alignment
-        ctrl_file_path = self.write_out_control_file(
-            output_dir='{}/block_{}'.format(output_dir, block_counter),
-            num_alignments=num_align,
-            grp=block_counter)
+        ctrl_file_path = self.write_out_control_file(num_alignments=num_align)
         # write out the phylip file
-        seq_file_path = '{}/block_{}/block_{}_cds.phylip'.format(output_dir, block_counter, block_counter)
+        seq_file_path = os.path.join(
+            self.output_dir, f'block_{self.block_counter}', f'block_{self.block_counter}_cds.phylip')
         with open(seq_file_path, 'w') as f:
             for line in phylip_alignment:
                 f.write('{}\n'.format(line))
         # write out the tree file
+        tree_file = None
         if self.species == 'b_minutum':
-            tree_file = ''
-        tree_file_path = '{}/block_{}/block_{}_tree.nwk'.format(output_dir, block_counter, block_counter)
+            tree_file = '((SRR1793323:0.00207691863248198353,SRR1793321:0.00135412970390987497):' \
+                        '0.00162401761552979072,SRR1793322:0.00313910729521391747,' \
+                        'SRR1793320:0.00302742649625364728):0.0;'
+        elif self.species == 'b_psygmophilum':
+            tree_file = '(SRR1793326:0.00128083627808537638,(SRR1793327:0.00133413967614412271,SRR1793325:' \
+                        '0.00122248010329080036):0.00046190387263074311,SRR1793324:0.00327381204178443319):0.0;'
+
+        tree_file_path = os.path.join(self.output_dir, f'block_{self.block_counter}', f'block_{self.block_counter}_tree.nwk')
         with open(tree_file_path, 'w') as f:
-            f.write('{}\n'.format(tree_file))
+            f.write(f'{tree_file}\n')
 
         return (seq_file_path, ctrl_file_path, tree_file_path)
 
-    def write_out_control_file(self, output_dir, num_alignments, grp):
-        seq_file_path = '{}/block_{}_cds.phylip'.format(output_dir, grp)
-        out_file_path = '{}/block_{}_guidance_results.out'.format(output_dir, grp)
-        ctrl_path     = '{}/block_{}_cds.ctrl'.format(output_dir, grp)
-        tree_file_path = '{}/block_{}/block_{}_tree.nwk'.format(output_dir, grp, grp)
+    def write_out_control_file(self, num_alignments):
+        block_output_dir = os.path.join(self.output_dir, f'block_{self.block_counter}')
+        seq_file_path = os.path.join(block_output_dir, f'block_{self.block_counter}_cds.phylip')
+        out_file_path = os.path.join(block_output_dir, f'block_{self.block_counter}_guidance_results.out')
+        ctrl_path     = os.path.join(block_output_dir, f'block_{self.block_counter}_cds.ctrl')
+        tree_file_path = os.path.join(block_output_dir,
+                                      f'block_{self.block_counter}', f'/block_{self.block_counter}_tree.nwk')
         ctrl_file = [
-        'seqfile = {}'.format(seq_file_path),
-        'treefile = {}'.format(tree_file_path),
-        'outfile = {}'.format(out_file_path),
+        f'seqfile = {seq_file_path}',
+        f'treefile = {tree_file_path}',
+        f'outfile = {out_file_path}',
         'runmode = -2',
         'seqtype = 1',
         'CodonFreq = 2',
-        'ndata = {}'.format(num_alignments),
+        f'ndata = {num_alignments}',
         'clock = 0',
         'model = 0',
         'NSsites = 0',
@@ -145,3 +151,6 @@ class CODEML:
                 f.write('{}\n'.format(line))
 
         return ctrl_path
+
+cml = CODEML()
+cml.generate_block_phylip_alignments_for_CODEML()
