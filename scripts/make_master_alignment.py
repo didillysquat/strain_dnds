@@ -1,8 +1,7 @@
 from collections import defaultdict
 import sys
 import os
-import shutil
-
+import subprocess
 class MasterAlignment:
     def __init__(self):
         self.species = sys.argv[1]
@@ -16,6 +15,7 @@ class MasterAlignment:
         self.q_file_out_path = sys.argv[3]
         os.makedirs(os.path.dirname(self.q_file_out_path), exist_ok=True)
         self.bad_prot_file_list = []
+        self.prottest_path = '/home/humebc/phylogeneticSoftware/prottest/prottest-3.4.2/prottest-3.4.2.jar'
         
     def _populate_list_of_prottest_paths(self):
         list_of_orth_group_dirs = list(os.walk(self.base_input_dir))[0][1]
@@ -58,8 +58,23 @@ class MasterAlignment:
                     model = temp_file_list[j].split(':')[1].strip().replace('+G', '').replace('+I', '')
                     break
             if model == '':
-                # sys.exit('Model line not found in {}'.format(orth_num))
-                self.bad_prot_file_list.append(protpath)
+                # attempt to rerun the protein model once
+                os.remove(protpath)
+                subprocess.run(
+                    ['java', '-jar', self.prottest_path, '-i',
+                     protpath.replace('_prottest_result.out', '.cropped_aligned_aa.fasta'), '-o', protpath,
+                     '-all-distributions', '-all'])
+                model = ''
+                # orth_num = int(os.path.dirname(protpath).split('_')[0])
+                with open(protpath, 'r') as f:
+                    temp_file_list = [line.rstrip() for line in f]
+                for j in range(300, len(temp_file_list), 1):
+                    if 'Best model according to BIC' in temp_file_list[j]:
+                        model = temp_file_list[j].split(':')[1].strip().replace('+G', '').replace('+I', '')
+                        break
+                if model == '':
+                    self.bad_prot_file_list.append(protpath)
+                    continue
                 # sys.exit('Model line not found in {}'.format(protpath))
             model_to_orth_dict[model].append(protpath.replace('_prottest_result.out', '.cropped_aligned_aa.fasta'))
 

@@ -295,12 +295,13 @@ rule make_tree:
 		fasta="concatenated_alignment/{species}/master_alignment.fasta",
 		q_file="concatenated_alignment/{species}/q_file.q"
 	output:
-		"master_tree/{species}/master_tree.tree"
+		"master_tree/{species}/RAxML_bestTree.strain_dn_ds"
 	conda:
 		"envs/raxml.yaml"
+	threads: 10
 	shell:
 		"raxmlHPC-PTHREADS-AVX2 -s {input.fasta} -q {input.q_file} -x"
-		" 183746 -f a, -p 83746273 -# 1000 -T 10 -n strain_dn_ds -m PROTGAMMAWAG -w "
+		" 183746 -f a, -p 83746273 -# 1000 -T {threads} -n strain_dn_ds -m PROTGAMMAWAG -w "
 		"/home/humebc/projects/parky/breviolum_transcriptomes/master_tree/{wildcards.species}"
 
 rule make_codeml_blocks:

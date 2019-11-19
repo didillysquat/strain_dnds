@@ -110,8 +110,8 @@ class CODEML:
             for line in phylip_alignment:
                 f.write('{}\n'.format(line))
         # write out the tree file
-        tree_file = '(ppsyg:0.01524804457090833502,(min:0.00305561548082329418,pmin:0.00350296114601793013)' \
-                    ':0.03350192310501232812,psyg:0.01618135662493049715);'
+        if self.species == 'b_minutum':
+            tree_file = ''
         tree_file_path = '{}/block_{}/block_{}_tree.nwk'.format(output_dir, block_counter, block_counter)
         with open(tree_file_path, 'w') as f:
             f.write('{}\n'.format(tree_file))
