@@ -41,7 +41,6 @@ class MasterAlignment:
         JTT, gene1 = 1-500
         WAGF, gene2 = 501-800
         WAG, gene3 = 801-1000
-
         '''
 
         # iter through the list of protfiles creating the dict relating model to ortholog

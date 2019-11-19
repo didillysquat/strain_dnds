@@ -314,6 +314,11 @@ rule make_codeml_blocks:
 	shell:
 		"python3 scripts/setup_codeml_blocks.py {wildcards.species} {output}"
 
+# I'm having a problem getting codeml to work within snakemake and with multithreading.
+# For the time being I'm just going to run it manually on the command line
+# We can come back to try to figure this out later if needs be.
+# I think the only way to get this fixed will be to make one massive set for each of the species
+# and completely ignore doing any kind of parallelisation
 rule run_codeml:
 	input:
 		"codeml/{species}/list_of_guidance_dirs.pickle"
@@ -322,15 +327,26 @@ rule run_codeml:
 	conda:
 		"envs/codeml.yaml"
 	shell:
-		"python3 scripts/run_codeml.py {species} {output}"
+		"python3 scripts/run_codeml.py {wildcards.species} {input}"
+
+rule make_codeml_output_df:
+	input:
+		"codeml/{species}/codeml_run_summary.txt"
+	output:
+		p="codeml/{species}/{species}_codeml_summary_df.pickle",
+		csv="codeml/{species}/{species}_codeml_summary_df.csv"
+	conda:
+		"envs/python_scripts.py"
+	shell:
+		"python3 scripts/make_codeml_summary_df.py {species} {output.p} {output.csv}"
 
 rule test:
 	output:
 		"test.txt"
 	conda:
-		"envs/python_scripts.yaml"
+		"envs/codeml.yaml"
 	shell:
-		"which raxml"
+		"which codeml"
 
 # ANNOTATION
 rule get_swiss_prot_db:

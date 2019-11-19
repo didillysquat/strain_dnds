@@ -38,11 +38,12 @@ class CODEML:
 
         # for each directory or ortholog
         tot_num_dirs = len(self.list_of_orth_group_dirs)
+        from_bad = False
         for orth_dir in self.list_of_orth_group_dirs:
             sys.stdout.write(f'\rOrtholog: {orth_dir}     {self.counter}/{tot_num_dirs}')
 
             # make a new alignment file for every 1000 individual alignments
-            if self.counter % 1000 == 0:
+            if self.counter % 1000 == 0 and not from_bad:
                 if self.block_counter != 0:
                     # then we already have a block that needs writing
                     seq_file_ctrl_file_tup = self.write_out_cntrl_and_seq_file(
@@ -50,6 +51,8 @@ class CODEML:
                     self.list_of_guidance_dirs.append(seq_file_ctrl_file_tup)
                 # once the old block is written out start a new one
                 self.block_counter += 1
+                if self.block_counter == 16:
+                    foo = 'asdf'
                 os.makedirs(f'{self.output_dir}/block_{self.block_counter}', exist_ok=True)
                 print(f'\n\nStarting block {self.block_counter}')
                 self.phylip_alignment = []
@@ -61,9 +64,11 @@ class CODEML:
             if single_phylip:
                 self.phylip_alignment.extend(single_phylip)
                 self.counter += 1
+                from_bad = False
             else:
                 # if the fasta was empty then log this and don't add anything to the counter
                 self.bad_dir_list.append(orth_dir)
+                from_bad = True
 
         # now write out the final block of alignments
         seq_file_ctrl_file_tup = self.write_out_cntrl_and_seq_file(
@@ -75,11 +80,11 @@ class CODEML:
     def generate_phylip_from_fasta(self, orth_grp_id):
         temp_str = str()
         temp_list = list()
-        aa_fasta_path = os.path.join(self.base_input_dir, orth_grp_id, f'{orth_grp_id}.cropped_aligned_aa.fasta')
-        if not os.path.exists(aa_fasta_path):
+        cds_fasta_path = os.path.join(self.base_input_dir, orth_grp_id, f'{orth_grp_id}.cropped_aligned_cds.fasta')
+        if not os.path.exists(cds_fasta_path):
             return False
 
-        with open(aa_fasta_path, 'r') as f:
+        with open(cds_fasta_path, 'r') as f:
             fasta_file = [line.rstrip() for line in f]
 
         if len(fasta_file[1]) == 0:
@@ -125,10 +130,9 @@ class CODEML:
     def write_out_control_file(self, num_alignments):
         block_output_dir = os.path.join(self.output_dir, f'block_{self.block_counter}')
         seq_file_path = os.path.join(block_output_dir, f'block_{self.block_counter}_cds.phylip')
-        out_file_path = os.path.join(block_output_dir, f'block_{self.block_counter}_guidance_results.out')
+        out_file_path = os.path.join(block_output_dir, f'block_{self.block_counter}_codeml_results.out')
         ctrl_path     = os.path.join(block_output_dir, f'block_{self.block_counter}_cds.ctrl')
-        tree_file_path = os.path.join(block_output_dir,
-                                      f'block_{self.block_counter}', f'/block_{self.block_counter}_tree.nwk')
+        tree_file_path = os.path.join(block_output_dir, f'block_{self.block_counter}_tree.nwk')
         ctrl_file = [
         f'seqfile = {seq_file_path}',
         f'treefile = {tree_file_path}',
@@ -143,7 +147,8 @@ class CODEML:
         'icode = 0',
         'fix_omega = 0',
         'omega = .4',
-        'cleandata = 0'
+        'cleandata = 0',
+        'verbose = 1'
         ]
 
         with open(ctrl_path, 'w') as f:
