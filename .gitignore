@@ -27,3 +27,4 @@ figures
 master_tree
 .nextflow*
 work/
+codeml_summary_dfs
