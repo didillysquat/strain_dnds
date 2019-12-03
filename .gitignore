@@ -25,3 +25,5 @@ codeml
 concatenated_alignment
 figures
 master_tree
+.nextflow*
+work/
