@@ -17,3 +17,6 @@ orf_prediction/
 sonicparanoid/
 sonicparanoid_env/
 sonicparanoid_out/
+.DS_store
+codeml_summary_dfs
+figures
