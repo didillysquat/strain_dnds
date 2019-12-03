@@ -17,6 +17,11 @@ orf_prediction/
 sonicparanoid/
 sonicparanoid_env/
 sonicparanoid_out/
-.DS_store
-codeml_summary_dfs
+logs/
+local_alignments/
+screened_orthologs/
+COS.std
+codeml
+concatenated_alignment
 figures
+master_tree

@@ -107,9 +107,21 @@ rule orf_prediction:
 	input:
 		"trinity_assembly/{species}/{sra}_trinity.Trinity.long_iso_only.fasta"
 	output:
-		"orf_prediction/{species}/{sra}/longest_iso_orfs.pep"
+		"orf_prediction/{species}/{sra}/longest_orfs.pep",
+		"orf_prediction/{species}/{sra}/longest_orfs.cds"
 	shell:
 		"TransDecoder.LongOrfs -t {input} -O orf_prediction/{wildcards.species}/{wildcards.sra}"
+
+# rename the longest_orfs files to longest_iso_orfs.XXX
+rule rename_longest_orf_files:
+	input:
+		pep="orf_prediction/{species}/{sra}/longest_orfs.pep",
+		cds="orf_prediction/{species}/{sra}/longest_orfs.cds"
+	output:
+		pep="orf_prediction/{species}/{sra}/longest_iso_orfs.pep",
+		cds="orf_prediction/{species}/{sra}/longest_iso_orfs.cds"
+	shell:
+		"mv {input.pep} {output.pep}; mv {input.cds} {output.cds}"
 
 # The transdecoder output can have multiple ORFs predicted per transcript
 # We will once again only keep one representative per transcript and work with this for the
@@ -181,52 +193,160 @@ dependencies:
 # This way the output will always be the same name i.e.:
 # sonicparanoid/output/runs/parkinson/ortholog_groups/ortholog_groups.tsv
 def expand_for_sonic(wildcards):
-    return [f"sonicparanoid/{wildcards.species}/{sra}_longest_iso_orfs.single_orf.pep" for sra in sra_dict[{wildcards.species}]]
+    return [f"sonicparanoid/{wildcards.species}/{sra}_longest_iso_orfs.single_orf.pep" for sra in sra_dict[wildcards.species]]
 
 rule orthology_sonic_paranoid:
 	input:
-		expand_for_sonic()
+		expand_for_sonic
 	output:
 		"sonicparanoid/{species}/output/runs/parkinson/ortholog_groups/ortholog_groups.tsv"
 	conda:
 		"envs/sonicparanoid.yaml"
-	threads:24
+	threads:12
 	shell:
 		"python3 scripts/sonicparanoid.py {wildcards.species} {threads}"
 
-rule orthology_sonic_paranoid_slc:
-	input:
-		expand("sonicparanoid/{sra}_longest_iso_orfs.single_orf.pep", sra=sra_dict['b_minutum']),
-		expand("sonicparanoid/{sra}_longest_iso_orfs.single_orf.pep", sra=sra_dict['b_psygmophilum'])
-	output:
-		"sonicparanoid_out/runs"
-	conda:
-		"envs/sonicparanoid.yaml"
-	threads:24
-	shell:
-		"sonicparanoid -i sonicparanoid -o sonicparanoid_out -t {threads} -slc"
-		# "python3 scripts/install_and_run_sonicparanoid.py"
 
-# Use the output from sonicparanoid to extract those ortholog groups that contain all 8 of the strains
+# Use the output from sonicparanoid to extract those ortholog groups that contain all four within
+# species strains with just one transcript per ortholog group.
 # Also make sure that we only have one ortholog per transcript.
 # The output of this will be in the same format as the input
 rule extract_unique_cross_strain_orthologs:
 	input:
-		input_one="sonicparanoid/output/runs/parkinson/ortholog_groups/ortholog_groups.tsv",
-		input_two="sonicparanoid/output/runs/parkinson/ortholog_groups/single-copy_groups.tsv"
+		"sonicparanoid/{species}/output/runs/parkinson/ortholog_groups/single-copy_groups.tsv"
 	output:
-		"screened_orthologs/screened_orthologs.tsv"
-	shell:
-		"python3.6 scripts/screen_orthologs.py {input.input_one} {input.input_two} {output}"
-
-rule tester:
-	output:
-		  "tester.txt"
+		"screened_orthologs/{species}/screened_orthologs.tsv"
 	conda:
-		 "envs/inparanoid.yaml"
+		"envs/python_scripts.yaml"
 	shell:
-		 "sonicparanoid -h"
+		"python3.6 scripts/screen_orthologs.py {input} {output}"
 
+# Now it is time to do the alignments
+# We will align using Guidance that will allow us to simultaneously
+# align sequences and remove uncertain columns
+# First step will be to create a directory for each of the ortholog groups. Then in each directory write out the
+# cds of the predicted pep
+def write_out_unaligned_cds_fastas_to_be_aligned_input(wildcards):
+	input_list = []
+	input_list.append(f"screened_orthologs/{wildcards.species}/screened_orthologs.tsv")
+	input_list.extend([f"orf_prediction/{wildcards.species}/{sra}/longest_iso_orfs.cds" for sra in sra_dict[wildcards.species]])
+	input_list.extend([f"orf_prediction/{wildcards.species}/{sra}/longest_iso_orfs.single_orf.pep" for sra in sra_dict[wildcards.species]])
+
+	return input_list
+
+rule write_out_unaligned_cds_fastas_to_be_aligned:
+	# We will need the screened_orthologs.tsv for each species and we will need the .cds files
+	# for the transdecoder ouputs that have been uniqued
+	input:
+		write_out_unaligned_cds_fastas_to_be_aligned_input
+	output:
+		"local_alignments/{species}/unaligned_fastas_summary.readme"
+	conda:
+		"envs/python_scripts.yaml"
+	shell:
+		"python3 scripts/write_out_unaligned_cds_fastas.py {wildcards.species} {input[0]} {input[1]}"
+
+#NB the conda version of guidance appears to be having severe compatability issues with both 
+# multiprocessing and the snakemake platform - not good.
+# Unfortunately the only way that I've been able to get this working is by manually activating the
+# conda environment in which guidance and python are installed and then running the python 
+# script align_local_cds_fastas.py by hand.
+# I also tried to use the compiled version of guidance but this seems to be having a bunch of issue with missing
+# perl libraries. Because I am bleeding time on this I am going to do this manually.
+# The other problem is that guidance does seem to do random error messages. But if you redo a given orth
+# group it will generally work fine. So for the time being I've set up the below script so that it will
+# skip over any of the orth groups that failed in the guidance analysis and then we will jut run this script
+# again to try to re-do only the orth groups for which the aa alignment was not produced.
+rule align_local_cds_fastas:
+	input:
+		"local_alignments/{species}/unaligned_fastas_summary.readme"
+	output:
+		"local_alignments/{species}/guidance_aligned_fastas_summary.readme"
+	threads: 10
+	conda:
+		"envs/guidance.yaml"
+	shell:
+		"python3 scripts/align_local_cds_fastas.py {wildcards.species} {input} {threads}"
+
+rule run_protein_models:
+	input:
+		"local_alignments/{species}/guidance_aligned_fastas_summary.readme"
+	output:
+		"local_alignments/{species}/protein_models_summary.txt"
+	conda:
+		"envs/python_scripts.yaml"
+	threads: 4
+	shell:
+		"python3 scripts/do_prottest.py {wildcards.species} {threads}"
+
+rule make_concatenated_aa_alignment:
+	input:
+		"local_alignments/{species}/protein_models_summary.txt"
+	output:
+		fasta="concatenated_alignment/{species}/master_alignment.fasta",
+		q_file="concatenated_alignment/{species}/q_file.q"
+	conda:
+		"envs/python_scripts.yaml"
+	shell:
+		"python3 scripts/make_master_alignment.py {wildcards.species} {output.fasta} {output.q_file}"
+	
+rule make_tree:
+	input:
+		fasta="concatenated_alignment/{species}/master_alignment.fasta",
+		q_file="concatenated_alignment/{species}/q_file.q"
+	output:
+		"master_tree/{species}/RAxML_bestTree.strain_dn_ds"
+	conda:
+		"envs/raxml.yaml"
+	threads: 10
+	shell:
+		"raxmlHPC-PTHREADS-AVX2 -s {input.fasta} -q {input.q_file} -x"
+		" 183746 -f a, -p 83746273 -# 1000 -T {threads} -n strain_dn_ds -m PROTGAMMAWAG -w "
+		"/home/humebc/projects/parky/breviolum_transcriptomes/master_tree/{wildcards.species}"
+
+rule make_codeml_blocks:
+	input:
+		"master_tree/{species}/RAxML_bestTree.strain_dn_ds"
+	output:
+		"codeml/{species}/list_of_guidance_dirs.pickle"
+	conda:
+		"envs/python_scripts.yaml"
+	shell:
+		"python3 scripts/setup_codeml_blocks.py {wildcards.species} {output}"
+
+# I'm having a problem getting codeml to work within snakemake and with multithreading.
+# For the time being I'm just going to run it manually on the command line
+# We can come back to try to figure this out later if needs be.
+# I think the only way to get this fixed will be to make one massive set for each of the species
+# and completely ignore doing any kind of parallelisation
+rule run_codeml:
+	input:
+		"codeml/{species}/list_of_guidance_dirs.pickle"
+	output:
+		"codeml/{species}/codeml_run_summary.txt"
+	conda:
+		"envs/codeml.yaml"
+	shell:
+		"python3 scripts/run_codeml.py {wildcards.species} {input}"
+
+rule make_codeml_output_df:
+	input:
+		"codeml/{species}/codeml_run_summary.txt"
+	output:
+		p="codeml/{species}/{species}_codeml_summary_df.pickle",
+		csv="codeml/{species}/{species}_codeml_summary_df.csv"
+	conda:
+		"envs/python_scripts.py"
+	shell:
+		"python3 scripts/make_codeml_summary_df.py {species} {output.p} {output.csv}"
+
+rule test:
+	output:
+		"test.txt"
+	conda:
+		"envs/codeml.yaml"
+	shell:
+		"which codeml"
 
 # ANNOTATION
 rule get_swiss_prot_db:

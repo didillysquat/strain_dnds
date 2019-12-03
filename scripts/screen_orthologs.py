@@ -1,37 +1,36 @@
 import sys
 import pandas as pd
 from collections import defaultdict
+import os
 class screen_orthologs:
     def __init__(self):
-        self.orth_df_in_multi = pd.read_csv(filepath_or_buffer=sys.argv[1], header=0, sep='\t')
-        self.orth_df_in_single = pd.read_csv(filepath_or_buffer=sys.argv[2], header=0, sep='\t')
-        self.orth_out_path = sys.argv[3]
+        self.orth_df_in_single = pd.read_csv(filepath_or_buffer=sys.argv[1], header=0, sep='\t')
+        self.orth_out_path = sys.argv[2]
+        os.makedirs(os.path.dirname(self.orth_out_path), exist_ok=True)
 
     def screen_orfs(self):
-        # only keep the orthologs that were found in all 8 of the strains
-        self.orth_df_in_multi = self.orth_df_in_multi[self.orth_df_in_multi['sp_in_grp'] == 8]
-        self.orth_df_in_multi = self.orth_df_in_multi[self.orth_df_in_multi['group_size'] == 8]
-        # only keep the rows that do not contain *
-        self.orth_df_in_single.set_index(keys='group_id', drop=True, inplace=True)
-        print(f'The index is {len(self.orth_df_in_single.index)} long')
-        for col in list(self.orth_df_in_single):
-            self.orth_df_in_single = self.orth_df_in_single[self.orth_df_in_single[col] != '*']
-            print(f'The index is {len(self.orth_df_in_single.index)} long')
+        # This gave exactly the same result as for the orth_df_multi
+        self.orth_df_in_single.set_index("group_id", drop=True, inplace=True)
+        headers = list(self.orth_df_in_single)
+        self.orth_df_in_single = self.orth_df_in_single[(self.orth_df_in_single[headers[0]] != '*') & (self.orth_df_in_single[headers[1]] != '*') & (self.orth_df_in_single[headers[2]] != '*') & (self.orth_df_in_single[headers[3]] != '*')]
 
-        foo = 'bar'
 
         # Now we need to look to see that each of the transcipts is used only once
         # we can start by doing this for just the first strain
-        trans_used = defaultdict(list)
-        for ind, ser in self.orth_df_in_single.iterrows():
-            for r_ind in ser.index.values.tolist():
-                trans_used[ser[r_ind]].append(ser.name)
+        species_headers = list(self.orth_df_in_single)
+        for i in range(4):
+            trans_used = defaultdict(list)
+            too_many = []
+            for ind, ser in self.orth_df_in_single.iterrows():
+                trans_used[ser[species_headers[0]]].append(ser.name)
+            # here we can see which of the transcripts have been used in more than one group
+            for trans_name_key, orth_group_list in trans_used.items():
+                if len(orth_group_list) > 1:
+                    raise RuntimeError(f"A transciprt for {species_headers[0]} was used in {len(orth_group_list)} groups.")
 
-        foo = "bar"
-
-        # First lets break it down to only those transcripts that have exact matches in each of the gen
-
-        # Dictionary to keep track of which of the transcripts have been used
+        # It can seems that all of the transcipts were used in just one of the ortholog groupings.
+        # now write out the dataframe
+        self.orth_df_in_single.to_csv(path_or_buf=self.orth_out_path, sep='\t')
 
 
 so = screen_orthologs()
