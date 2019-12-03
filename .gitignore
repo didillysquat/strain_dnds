@@ -21,3 +21,7 @@ logs/
 local_alignments/
 screened_orthologs/
 COS.std
+codeml
+concatenated_alignment
+figures
+master_tree
