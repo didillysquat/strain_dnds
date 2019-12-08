@@ -35,25 +35,25 @@ process gzip_fastq{
     
     script:
     """
-    gzip $fastq_file_one $fastq_file_two
+    gzip -f $fastq_file_one $fastq_file_two
     """
 }
 
 // Now fastqc the files
 process fastqc_pre_trim{
-    tag "${fastq_file_one}"
+    tag "${fastq_file}"
 
-    publishDir path: "fastqc_pre_trim", mode: "copy", saveAs: {filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
+    publishDir path: "nf_fastqc_pre_trim", mode: "copy", saveAs: {filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
 
     input:
-    tuple file(fastq_file_one), file(fastq_file_two) from ch_make_fastqc_pre_trim
+    file fastq_file from ch_make_fastqc_pre_trim.flatten()
 
     output:
     file "*_fastqc.{zip,html}" into ch_fastqc_pre_trim_output
 
     script:
     """
-    fastqc -o . $fastq_file_one $fastq_file_one
+    fastqc -o . $fastq_file
     """
 }
 
@@ -61,7 +61,7 @@ process fastqc_pre_trim{
 process trimmomatic{
 	tag "${fastq_file_one}"
 
-	publishDir path: "${params.mp_wkd}/trimmed", mode: 'copy', overwrite: 'true', pattern: "M_18*"
+	publishDir path: "nf_trimmed", mode: 'copy'
 
 	input:
 	tuple file(fastq_file_one), file(fastq_file_two) from ch_trimmomatic_input
@@ -86,18 +86,60 @@ process trimmomatic{
 
 // Now post-trim fastqc
 process fastqc_post_trim{
-    tag "${fastq_file_one}"
+    tag "${fastq_file}"
 
-    publishDir path: "fastqc_post_trim", mode: "copy", saveAs: {filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
+    publishDir path: "nf_fastqc_post_trim", mode: "copy", saveAs: {filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
 
     input:
-    tuple file(fastq_file_one), file(fastq_file_two) from ch_fastqc_post_trim_input
+    file fastq_file from ch_fastqc_post_trim_input.flatten()
 
     output:
     file "*_fastqc.{zip,html}" into ch_fastqc_post_trim_output
 
     script:
     """
-    fastqc -o . $fastq_file_one $fastq_file_one
+    fastqc -o . $fastq_file
+    """
+}
+
+// Now error correction
+process rcorrector{
+    tag "${trimmed_read_one}"
+    
+    cpus params.rcorrector_threads
+    
+    publishDir path: "nf_error_corrected", mode: "copy"
+    
+    input:
+    tuple file(trimmed_read_one), file(trimmed_read_two) from ch_rcorrect_input
+
+    output:
+    tuple file("*1P.cor.fq.gz"), file("*2P.cor.fq.gz") into ch_trinity_input
+
+    script:
+    """
+    run_rcorrector.pl -1 $trimmed_read_one -2 $trimmed_read_two -od . -t ${task.cpus}
+    """
+}
+
+// Now do the trinity assembly
+process trinity{
+    tag "${corrected_read_one}"
+
+    cpus params.trinity_threads
+    conda "envs/nf_only_trinity.yaml"
+    publishDir "nf_trinity_assembly/${corrected_read_one.getName().replaceAll('.trimmed_1P.cor.fq.gz','')}", mode: "copy"
+
+    input:
+    tuple file(corrected_read_one), file(corrected_read_two) from ch_trinity_input
+
+    output:
+    file "*.fasta" into ch_remove_short_iso_forms_input
+
+    script:
+    // NB that the output directory for each trinity assembly must have 'trinity' in it.
+    """
+    Trinity --left $corrected_read_one --right $corrected_read_two --seqType fq --max_memory 150G --CPU ${task.cpus} \\
+    --min_contig_length 250 --output trinity --full_cleanup
     """
 }
