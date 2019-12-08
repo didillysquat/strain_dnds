@@ -1,0 +1,5 @@
+name: nf_transdecoder
+channels:
+  - bioconda
+dependencies:
+  - transdecoder=5.5.0

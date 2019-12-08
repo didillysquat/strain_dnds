@@ -159,11 +159,33 @@ process remove_short_isos{
     val srrname from ch_remove_short_iso_forms_srr_name_input
 
     output:
-    file "*.long_iso_only.fasta" into ch_orf_input_prediction
-
+    file "*.long_iso_only.fasta" into ch_orf_prediction_input
+    val srrname into ch_orf_prediction_srr_name
+    
     script:
     output_name = trinity_assembly_fasta.getName().replaceAll('.fasta','.long_iso_only.fasta')
     """
     python3 ${workflow.launchDir}/bin/remove_short_isos.py $trinity_assembly_fasta $output_name
     """
+}
+
+process orf_prediction{
+tag "${srrname}"
+
+conda "envs/nf_transdecoder.yaml"
+publishDir "nf_transdecoder/$srrname", mode: "copy"
+
+input:
+file long_iso_trinity from ch_orf_prediction_input
+val srrname from ch_orf_prediction_srr_name
+
+output:
+tuple file("*.pep"), file("*.cds") into ch_rename_longest_orfs_input
+val srrname into ch_rename_longest_orfs_srrname
+
+script:
+"""
+TransDecoder.LongOrfs -t $long_iso_trinity -O .
+"""
+
 }
