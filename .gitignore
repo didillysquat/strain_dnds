@@ -34,3 +34,4 @@ nf_fastqc_post_trim/
 nf_fastqc_pre_trim/
 nf_trimmed/
 nf_trinity_assembly/
+nf_transdecoder/
