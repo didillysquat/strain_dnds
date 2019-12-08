@@ -1,0 +1,5 @@
+name: nf_only_trinity
+channels:
+  - bioconda
+dependencies:
+  - trinity=2.8.5

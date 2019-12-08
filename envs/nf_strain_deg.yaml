@@ -1,0 +1,14 @@
+name: nf_strain_dn_ds
+channels:
+  - bioconda
+dependencies:
+  - trinity=2.8.5
+  - rcorrector=1.0.4
+  - trimmomatic=0.39
+  - sra-tools=2.10.0
+  - fastqc=0.11.8
+  - blast=2.9.0
+  - transdecoder=5.5.0
+  - pip
+  - pip:
+    - biopython
