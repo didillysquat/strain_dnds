@@ -134,12 +134,36 @@ process trinity{
     tuple file(corrected_read_one), file(corrected_read_two) from ch_trinity_input
 
     output:
-    file "*.fasta" into ch_remove_short_iso_forms_input
+    file "*.fasta" into ch_remove_short_iso_forms_trinity_input
+    // Also put the corrected_read_one back into a channel and use it to derive the SRR
+    // base used to make the to put the 
+    val "${corrected_read_one.getName().replaceAll('.trimmed_1P.cor.fq.gz','')}" into ch_remove_short_iso_forms_srr_name_input
 
     script:
     // NB that the output directory for each trinity assembly must have 'trinity' in it.
     """
     Trinity --left $corrected_read_one --right $corrected_read_two --seqType fq --max_memory 150G --CPU ${task.cpus} \\
     --min_contig_length 250 --output trinity --full_cleanup
+    """
+}
+
+// Now remove the short isos from the trinity assembly
+process remove_short_isos{
+    tag "${trinity_assembly_fasta}"
+
+    conda "envs/nf_python_scripts.yaml"
+    publishDir "nf_trinity_assembly/$srrname", mode: "copy"
+
+    input:
+    file trinity_assembly_fasta from ch_remove_short_iso_forms_trinity_input
+    val srrname from ch_remove_short_iso_forms_srr_name_input
+
+    output:
+    file "*.long_iso_only.fasta" into ch_orf_input_prediction
+
+    script:
+    output_name = trinity_assembly_fasta.getName().replaceAll('.fasta','.long_iso_only.fasta')
+    """
+    python3 ${workflow.launchDir}/bin/remove_short_isos.py $trinity_assembly_fasta $output_name
     """
 }
