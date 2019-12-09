@@ -1,6 +1,7 @@
 #!/usr/bin/env nextflow
 // First download the .fastq files
 params.sra_list = ["SRR1793320", "SRR1793321", "SRR1793322", "SRR1793323", "SRR1793324", "SRR1793325", "SRR1793326", "SRR1793327", "SRR1795737", "SRR1795735"]
+params.bin_dir = "${workflow.launchDir}/bin"
 Channel.fromList(params.sra_list).set{ch_download_fastq}
 // We are getting an error when trying to initialize all 10 of the fastq-dump requests at once.
 // when running in tmux. But this doesn't seem to happen outside of tmux
@@ -148,6 +149,16 @@ process trinity{
 }
 
 // Now remove the short isos from the trinity assembly
+// NB we were having problems getting the cache of this process to work.
+// The problem was that I was using $workflow.launch_dir as the base to the /bin/remove... path
+// However, when I looked at the hash logs, the value of this ($workflow.launch_dir) was giving a different hash
+// hash each time. I think this was because what was getting hashed was the state of this directory.
+// Obviously the state was changing very often.
+// To get the hash to work in the end I have replaced the $workflow.launch_dir with a params.bin_dir
+// variable that I have set at the beginning of this file using the $workflow.launch_dir variable.
+// I will look to see now whether the hash logs are looking at this new variable as a string or at
+// the state of this directory. If they're looking at the state of the directory then caches may
+// fail when we add additional script files to the /bin directory.
 process remove_short_isos{
     tag "${trinity_assembly_fasta}"
 
@@ -163,29 +174,54 @@ process remove_short_isos{
     val srrname into ch_orf_prediction_srr_name
     
     script:
-    output_name = trinity_assembly_fasta.getName().replaceAll('.fasta','.long_iso_only.fasta')
     """
-    python3 ${workflow.launchDir}/bin/remove_short_isos.py $trinity_assembly_fasta $output_name
+    python3 ${params.bin_dir}/remove_short_isos.py $trinity_assembly_fasta
     """
 }
 
+// Do ORF prediction using transdecoder
+// Concurrently rename the default names output by transdecoder
+// To make the long_iso_orf files unique and related to their transcriptome we will append the srrname
 process orf_prediction{
-tag "${srrname}"
+    tag "${srrname}"
 
-conda "envs/nf_transdecoder.yaml"
-publishDir "nf_transdecoder/$srrname", mode: "copy"
+    conda "envs/nf_transdecoder.yaml"
+    publishDir "nf_transdecoder/$srrname", mode: "copy"
 
-input:
-file long_iso_trinity from ch_orf_prediction_input
-val srrname from ch_orf_prediction_srr_name
+    input:
+    file long_iso_trinity from ch_orf_prediction_input
+    val srrname from ch_orf_prediction_srr_name
 
-output:
-tuple file("*.pep"), file("*.cds") into ch_rename_longest_orfs_input
-val srrname into ch_rename_longest_orfs_srrname
+    output:
+    tuple file("*.pep"), file("*.cds") into ch_remove_multi_orfs_input
 
-script:
-"""
-TransDecoder.LongOrfs -t $long_iso_trinity -O .
-"""
+    script:
+    """
+    TransDecoder.LongOrfs -t $long_iso_trinity -O .
+    mv longest_orfs.cds ${srrname}_longest_iso_orfs.cds
+    mv longest_orfs.pep ${srrname}_longest_iso_orfs.pep
+    """
 
+}
+
+// The transdecoder output can have multiple ORFs predicted per transcript
+// We will once again only keep one representative per transcript and work with this for the
+// ortholog prediction
+// Sonic Parnoid runs from a single directory containing all of the fastas
+// To enable this we will publish each of the fastas into a single directory
+process remove_multi_orfs_from_pep{
+    tag "${srrname}"
+    conda "envs/nf_python_scripts.yaml"
+    publishDir "nf_sonicparanoid", mode: "copy"
+
+    input:
+    tuple file(pep_file), file(cds_file) from ch_remove_multi_orfs_input
+
+    output:
+    tuple file("*.single_orf.pep"), file(cds_file) into ch_sonic_paranoid_input
+
+    script:
+    output_path = pep_file.getName().replaceAll("longest_iso_orfs.pep", "longest_iso_orfs.single_orf.pep")
+    
+    "python3 ${params.bin_dir}/unique_orfs_from_pep.py $pep_file"
 }

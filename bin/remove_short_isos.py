@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """Read in the trinity fasta that contains all iso forms of given genes.
 Remove write out a new fasta that contains only the longest isofrom of each of the genes"""
 from Bio import SeqIO
