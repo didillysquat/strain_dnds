@@ -2,6 +2,7 @@
 // First download the .fastq files
 params.sra_list = ["SRR1793320", "SRR1793321", "SRR1793322", "SRR1793323", "SRR1793324", "SRR1793325", "SRR1793326", "SRR1793327", "SRR1795737", "SRR1795735"]
 params.bin_dir = "${workflow.launchDir}/bin"
+params.launch_dir = "${workflow.launchDir}"
 Channel.fromList(params.sra_list).set{ch_download_fastq}
 // We are getting an error when trying to initialize all 10 of the fastq-dump requests at once.
 // when running in tmux. But this doesn't seem to happen outside of tmux
@@ -210,7 +211,7 @@ process orf_prediction{
 // Sonic Parnoid runs from a single directory containing all of the fastas
 // To enable this we will publish each of the fastas into a single directory
 process remove_multi_orfs_from_pep{
-    tag "${srrname}"
+    tag "${pep_file}"
     conda "envs/nf_python_scripts.yaml"
     publishDir "nf_sonicparanoid", mode: "copy"
 
@@ -218,10 +219,31 @@ process remove_multi_orfs_from_pep{
     tuple file(pep_file), file(cds_file) from ch_remove_multi_orfs_input
 
     output:
-    tuple file("*.single_orf.pep"), file(cds_file) into ch_sonic_paranoid_input
-
+    //tuple file("*.single_orf.pep"), file(cds_file) into ch_sonic_paranoid_input
+    file("*.single_orf.pep") into ch_sonicparanoid_input
+    
     script:
     output_path = pep_file.getName().replaceAll("longest_iso_orfs.pep", "longest_iso_orfs.single_orf.pep")
     
     "python3 ${params.bin_dir}/unique_orfs_from_pep.py $pep_file"
+}
+
+process sonicparanoid{
+    tag "sonicparanoid"
+    cpus params.sonicparanoid_threads
+    conda "envs/nf_sonicparanoid.yaml"
+    publishDir path: "nf_sonicparanoid/output_10", mode: "copy"
+
+    input:
+    // We won't actually use this input. It is just here to link
+    // The processes
+    file pep_file from ch_sonicparanoid_input.collect()
+
+    output:
+    file "single-copy_groups.tsv" into ch_extract_unique_cross_strain_orthologs
+
+    script:
+    """
+    sonicparanoid -i ${params.launch_dir}/nf_sonicparanoid -o . -t ${task.cpus}
+    """
 }

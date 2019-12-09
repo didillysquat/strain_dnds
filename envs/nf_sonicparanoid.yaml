@@ -1,0 +1,10 @@
+name: nf_sonicparanoid
+channels:
+  - bioconda
+  - pkgs/main
+dependencies:
+  - python=3.7.0
+  - pip
+  - pip:
+      - cython
+      - sonicparanoid
