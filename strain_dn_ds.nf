@@ -232,18 +232,52 @@ process sonicparanoid{
     tag "sonicparanoid"
     cpus params.sonicparanoid_threads
     conda "envs/nf_sonicparanoid.yaml"
-    publishDir path: "nf_sonicparanoid/output_10", mode: "copy"
-
+    
     input:
     // We won't actually use this input. It is just here to link
     // The processes
     file pep_file from ch_sonicparanoid_input.collect()
 
     output:
-    file "single-copy_groups.tsv" into ch_extract_unique_cross_strain_orthologs
+    file "**single-copy_groups.tsv" into ch_rename_sonicparanoid_output_input
 
     script:
     """
     sonicparanoid -i ${params.launch_dir}/nf_sonicparanoid -o . -t ${task.cpus}
+    """
+}
+
+// The sonicparanoid file we want (single-copy_groups.tsv) is buried in a number of directories
+// Here we will get rid of all of the directories and rebulish just the file
+process rename_sonicparanoid_output{
+    tag "rename sonicparanoid output"
+    publishDir path: "nf_sonicparanoid/output_10", mode: "copy"
+
+    input:
+    file sonic_long_out from ch_rename_sonicparanoid_output_input
+
+    output:
+    file sonic_long_out into ch_screen_sonicparanoid_output_input
+
+    script:
+    "echo renamingDone"
+}
+
+// The sonic paranoid output table contains orthologs that were not found in all of the transciptomes
+// We will drop these orthologs and write out the .tsv again
+process screen_sonicparnoid_output{
+    tag "screen sonicparanoid"
+    conda "envs/nf_python_scripts.yaml"
+    publishDir path: "nf_sonicparanoid/output_10", mode: "copy"
+
+    input:
+    file single_copy_tsv from ch_screen_sonicparanoid_output_input
+
+    output:
+    file "screened_orthologs.tsv" into ch_align_cds_input
+
+    script:
+    """
+    python3 ${params.bin_dir}/screen_orthologs.py $single_copy_tsv
     """
 }
