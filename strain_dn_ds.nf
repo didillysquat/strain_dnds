@@ -221,6 +221,7 @@ process remove_multi_orfs_from_pep{
     output:
     //tuple file("*.single_orf.pep"), file(cds_file) into ch_sonic_paranoid_input
     file("*.single_orf.pep") into ch_sonicparanoid_input
+    file cds_file into ch_write_unaligned_cds_fastas_fas_input
     
     script:
     output_path = pep_file.getName().replaceAll("longest_iso_orfs.pep", "longest_iso_orfs.single_orf.pep")
@@ -274,10 +275,38 @@ process screen_sonicparnoid_output{
     file single_copy_tsv from ch_screen_sonicparanoid_output_input
 
     output:
-    file "screened_orthologs.tsv" into ch_align_cds_input
+    file "screened_orthologs.tsv" into ch_write_unaligned_cds_fastas_tab_input
 
     script:
     """
     python3 ${params.bin_dir}/screen_orthologs.py $single_copy_tsv
+    """
+}
+
+
+// Work through the screened_orthologs and for each ortholog make a directory
+// and write out a fasta that contains the sequence for each of the strains
+// Input to the script will be the .tsv. Each of the .cds fastas will be
+// in the nextflow working directory due to the channel input
+// The column titles of the screened ortholog .tsv are the .pep file
+// names (e.g. SRR1793320_longest_iso_orfs.single_orf.pep)
+// The cds files that we will be getting the sequences from are all prefixed
+// with the SRRXXX (e.g. SRR1793320_longest_iso_orfs.cds). As such we can use
+// this SRRXXX in the python script to map between the table and the .cds files
+process write_unaligned_cds_fastas{
+    tag "write_unaligned_cds_fastas"
+    conda "envs/nf_python_scripts.yaml"
+    publishDir "nf_local_alignments", mode: "copy"
+    
+    input:
+    file screened_orth_table from ch_write_unaligned_cds_fastas_tab_input
+    file cds_fastas from ch_write_unaligned_cds_fastas_fas_input.collect()
+
+    output:
+    file "**/*_unaligned_cds.fasta" into ch_align_local_fastas_input
+
+    script:
+    """
+    python3 ${params.bin_dir}/write_out_unaligned_cds_fastas.py $screened_orth_table
     """
 }
