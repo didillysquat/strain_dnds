@@ -296,17 +296,53 @@ process screen_sonicparnoid_output{
 process write_unaligned_cds_fastas{
     tag "write_unaligned_cds_fastas"
     conda "envs/nf_python_scripts.yaml"
-    publishDir "nf_local_alignments", mode: "copy"
+    publishDir path: "nf_local_alignments", mode: "copy"
     
     input:
     file screened_orth_table from ch_write_unaligned_cds_fastas_tab_input
     file cds_fastas from ch_write_unaligned_cds_fastas_fas_input.collect()
 
     output:
-    file "**/*_unaligned_cds.fasta" into ch_align_local_fastas_input
+    file "**/*_unaligned_cds.fasta" into ch_align_using_guidance_input
 
     script:
     """
     python3 ${params.bin_dir}/write_out_unaligned_cds_fastas.py $screened_orth_table
     """
 }
+
+// Align each of the unaligned cds files.
+// We will do this in two processes.
+// First we will perform the guidance analysis
+// Then we will use the three output files to create the aligned fastas
+// That have been cropped and had the appropriate low quality columns dropped
+// As always, Guidance is proving tricky to get to run
+// We have had to explicityly add per-bioperl to the env yaml
+// Then, the bash wrapper for the perl execution of the guidance.pl
+// is not working so you have to explicityly run perl and the full path to guidance.pl
+// Because we can't know what the full path is, we will write a quick python script
+// to find this out and run it.
+process align_using_guidance{
+    tag "${unaligned_fasta.toString().split('_')[0]}"
+    conda "envs/nf_guidance.yaml"
+
+    input:
+    file unaligned_fasta from ch_align_using_guidance_input.flatten()
+
+    output:
+    tuple file("*.MAFFT.Guidance2_res_pair_res.PROT.scr"), file("*.MAFFT.PROT.aln"), file("*.MAFFT.aln") into ch_process_guidance_output_input
+
+    script:
+    orth_group_id = unaligned_fasta.toString().split('_')[0]
+    """
+    python3 ${params.bin_dir}/run_guidance.py $unaligned_fasta
+    """
+}
+
+// process process_guidance_output{
+//     // We want to publish each of the output files into the corresponding ortholog directory
+//     // So here we will attempt to use the closure to extract the ortholog number
+//     /// and assign the publication directory accrodingly.
+//     publishDir path: "nf_local_alignments", mode: "copy", saveAs:   {filename -> def orth_id = filename.split('_')[0]
+//                                                                                 return "$orth_id/$filename"}
+// }

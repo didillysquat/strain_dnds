@@ -1,0 +1,10 @@
+name: nf_guidance
+channels:
+  - pkgs/main
+  - bioconda
+  - genomedk
+dependencies:
+  - perl-bioperl=1.7.2
+  - guidance=2.02
+  - pip:
+      - pandas
