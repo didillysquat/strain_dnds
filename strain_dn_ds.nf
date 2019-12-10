@@ -404,10 +404,25 @@ process make_master_alignment_and_q_file{
     val nf_prot_out_dir from ch_make_master_alignment_dir_input.collect()
 
     output:
-    tuple file("master_fasta_for_tree.fasta"), file("q_partition_file.q") into ch_tree_making_input
+    tuple file("master_fasta_for_tree.fasta"), file("q_partition_file.q") into ch_make_tree_input
 
     script:
     """
     python3 ${params.bin_dir}/make_master_alignment.py ${params.launch_dir}/${nf_prot_out_dir[0]}
+    """
+}
+
+process make_tree{
+    tag "make_tree"
+    cpus params.raxml_threads
+    conda "envs/nf_raxml.yaml"
+
+    input:
+    tuple file(master_fasta), file(q_partition_file) from ch_make_tree_input
+    
+    script:
+    """
+    raxmlHPC-PTHREADS-AVX2 -s $master_fasta -q $q_partition_file -x 183746 -f a, -p \\
+    83746273 -# 1000 -T ${task.cpus} -n strain_dn_ds -m PROTGAMMAWAG
     """
 }
