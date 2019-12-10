@@ -364,7 +364,7 @@ process process_guidance_output{
     """
 }
 
-// Now do find the best protein evo model
+// Now find the best protein evo model
 // In some cases the fasta files that resulted from the process_guidance_output may be empty
 // As such we will wrap the modeltest-ng running in a python script that will check for this.
 // If there is this problem with the aligned fasta then we will return code 0
@@ -374,37 +374,40 @@ process process_guidance_output{
 process model_test{
     tag "${cropped_aligned_aa_fasta.toString().split('_')[0]}"
     conda "envs/nf_modeltest-ng.yaml"
+    publishDir path: "nf_prot_out"
 
     input:
     file cropped_aligned_aa_fasta from ch_model_test_input
 
     output:
     tuple file("*_prottest_result.out"), file(cropped_aligned_aa_fasta) into ch_make_master_alignment_input
-
+    val "nf_prot_out" into ch_make_master_alignment_dir_input
     script:
     """
     python3 ${params.bin_dir}/run_model_test.py $cropped_aligned_aa_fasta
     """
 }
 
-// // To make the master tree we will work witha single process that
-// // will need to iterthrough each of the protein model outputs.
-// // It will also need access to the aa cropped and alignment files
-// // We will supply both of these in two seperate input channels
-// // The output will be a master fasta and a q file for raxml that delimits the partions
-// // that can then be fed into the treemaking
-// process make_master_alignment_and_q_file{
-//     tag "make_master_alignment"
-//     conda "envs/nf_python_scripts.yaml"
+// ch_make_master_alignment_input.collect().subscribe {  println "Got: $it"  }
 
-//     input:
-//     tuple file(input_list) from ch_make_master_alignment_input.collect()
+// To make the master tree we will work witha single process that
+// will need to iterthrough each of the protein model outputs.
+// It will also need access to the aa cropped and alignment files
+// We will supply both of these in two seperate input channels
+// The output will be a master fasta and a q file for raxml that delimits the partions
+// that can then be fed into the treemaking
+process make_master_alignment_and_q_file{
+    tag "make_master_alignment"
+    conda "envs/nf_python_scripts.yaml"
 
-//     output:
-//     tuple file("master_fasta_for_tree.fasta"), file("q_partition_file.q") into ch_tree_making_input
+    input:
+    val nf_prot_out_dir from ch_make_master_alignment_dir_input.collect()
 
-//     script:
-//     """
-//     python3 ${params.bin_dir}/make_master_alignment.py
-//     """
-// }
+    output:
+    tuple file("master_fasta_for_tree.fasta"), file("q_partition_file.q") into ch_tree_making_input
+
+    script:
+    """
+    python3 ${params.bin_dir}/make_master_alignment.py ${params.launch_dir}/${nf_prot_out_dir[0]}
+    """
+}
