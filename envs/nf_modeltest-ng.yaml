@@ -1,0 +1,5 @@
+name: nf_modeltest-ng
+channels:
+  - bioconda
+dependencies:
+  - modeltest-ng

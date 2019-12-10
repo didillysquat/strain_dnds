@@ -322,6 +322,10 @@ process write_unaligned_cds_fastas{
 // is not working so you have to explicityly run perl and the full path to guidance.pl
 // Because we can't know what the full path is, we will write a quick python script
 // to find this out and run it.
+// Guidance seems to be quite unstable. It seems to produce errors for no reason.
+// However, the pipeline can simply be restarted and everything seems to behave OK.
+// As such I have now implemented an automatic retry process where the python
+// script will attempt to re-run the guidance analysis in question before quitting.
 process align_using_guidance{
     tag "${unaligned_fasta.toString().split('_')[0]}"
     conda "envs/nf_guidance.yaml"
@@ -330,7 +334,7 @@ process align_using_guidance{
     file unaligned_fasta from ch_align_using_guidance_input.flatten()
 
     output:
-    tuple file("*.MAFFT.Guidance2_res_pair_res.PROT.scr"), file("*.MAFFT.PROT.aln"), file("*.MAFFT.aln") into ch_process_guidance_output_input
+    tuple file("*.MAFFT.Guidance2_res_pair_res.PROT.scr"), file("*.MAFFT.PROT.aln"), file("*.MAFFT.aln.With_Names") into ch_process_guidance_output_input
 
     script:
     orth_group_id = unaligned_fasta.toString().split('_')[0]
@@ -339,10 +343,68 @@ process align_using_guidance{
     """
 }
 
-// process process_guidance_output{
-//     // We want to publish each of the output files into the corresponding ortholog directory
-//     // So here we will attempt to use the closure to extract the ortholog number
-//     /// and assign the publication directory accrodingly.
-//     publishDir path: "nf_local_alignments", mode: "copy", saveAs:   {filename -> def orth_id = filename.split('_')[0]
-//                                                                                 return "$orth_id/$filename"}
+// This process will use the three ouput files from align_using_guidance
+process process_guidance_output{
+    // We want to publish each of the output files into the corresponding ortholog directory
+    // So here we will attempt to use the closure to extract the ortholog number
+    /// and assign the publication directory accrodingly.
+    tag "${aa_cols_score_file_path.toString().split('_')[0]}"
+    publishDir path: "nf_local_alignments", mode: "copy", saveAs:   {filename -> def orth_id = filename.split('_')[0]
+                                                                                return "$orth_id/$filename"}
+
+    input:
+    tuple file(aa_cols_score_file_path), file(aa_alignment_file_path), file(cds_alignment_file_path) from ch_process_guidance_output_input
+
+    output:
+    file "*_cropped_aligned_aa.fasta" into ch_model_test_input
+
+    script:
+    """
+    python3 ${params.bin_dir}/process_guidance_output.py $aa_cols_score_file_path $aa_alignment_file_path $cds_alignment_file_path
+    """
+}
+
+// Now do find the best protein evo model
+// In some cases the fasta files that resulted from the process_guidance_output may be empty
+// As such we will wrap the modeltest-ng running in a python script that will check for this.
+// If there is this problem with the aligned fasta then we will return code 0
+// before making sure to delete any *.out file that might have been made
+// We will make it so that the *_prottest_result.out is output empty.
+// We can then check for the empty .out file in the make_master_alignment
+process model_test{
+    tag "${cropped_aligned_aa_fasta.toString().split('_')[0]}"
+    conda "envs/nf_modeltest-ng.yaml"
+
+    input:
+    file cropped_aligned_aa_fasta from ch_model_test_input
+
+    output:
+    tuple file("*_prottest_result.out"), file(cropped_aligned_aa_fasta) into ch_make_master_alignment_input
+
+    script:
+    """
+    python3 ${params.bin_dir}/run_model_test.py $cropped_aligned_aa_fasta
+    """
+}
+
+// // To make the master tree we will work witha single process that
+// // will need to iterthrough each of the protein model outputs.
+// // It will also need access to the aa cropped and alignment files
+// // We will supply both of these in two seperate input channels
+// // The output will be a master fasta and a q file for raxml that delimits the partions
+// // that can then be fed into the treemaking
+// process make_master_alignment_and_q_file{
+//     tag "make_master_alignment"
+//     conda "envs/nf_python_scripts.yaml"
+
+//     input:
+//     tuple file(input_list) from ch_make_master_alignment_input.collect()
+
+//     output:
+//     tuple file("master_fasta_for_tree.fasta"), file("q_partition_file.q") into ch_tree_making_input
+
+//     script:
+//     """
+//     python3 ${params.bin_dir}/make_master_alignment.py
+//     """
 // }
