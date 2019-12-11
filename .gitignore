@@ -36,3 +36,4 @@ nf_trimmed/
 nf_trinity_assembly/
 nf_transdecoder/
 nf_sonicparanoid
+.vscode/

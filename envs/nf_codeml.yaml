@@ -1,0 +1,7 @@
+name: nf_codeml
+channels:
+  - bioconda
+  - pkgs/main
+dependencies:
+  - paml
+  - python=3.7.0

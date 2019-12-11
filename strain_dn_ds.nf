@@ -1,6 +1,7 @@
 #!/usr/bin/env nextflow
 // First download the .fastq files
 params.sra_list = ["SRR1793320", "SRR1793321", "SRR1793322", "SRR1793323", "SRR1793324", "SRR1793325", "SRR1793326", "SRR1793327", "SRR1795737", "SRR1795735"]
+params.sra_list_as_csv = "SRR1793320,SRR1793321,SRR1793322,SRR1793323,SRR1793324,SRR1793325,SRR1793326,SRR1793327,SRR1795737,SRR1795735"
 params.bin_dir = "${workflow.launchDir}/bin"
 params.launch_dir = "${workflow.launchDir}"
 Channel.fromList(params.sra_list).set{ch_download_fastq}
@@ -357,6 +358,7 @@ process process_guidance_output{
 
     output:
     file "*_cropped_aligned_aa.fasta" into ch_model_test_input
+    file "*_cropped_aligned_cds.fasta" into ch_run_codeml_align_input
 
     script:
     """
@@ -412,6 +414,7 @@ process make_master_alignment_and_q_file{
     """
 }
 
+// Make a ML tree using raxml
 process make_tree{
     tag "make_tree"
     cpus params.raxml_threads
@@ -419,10 +422,72 @@ process make_tree{
 
     input:
     tuple file(master_fasta), file(q_partition_file) from ch_make_tree_input
-    
+
+    output:
+    tuple file("RAxML_bestTree.strain_dn_ds"), file("RAxML_bipartitionsBranchLabels.strain_dn_ds"), file("RAxML_bipartitions.strain_dn_ds") into ch_annotate_tree_input
+    file "RAxML_bestTree.strain_dn_ds" into ch_run_codeml_tree_input
     script:
     """
     raxmlHPC-PTHREADS-AVX2 -s $master_fasta -q $q_partition_file -x 183746 -f a, -p \\
     83746273 -# 1000 -T ${task.cpus} -n strain_dn_ds -m PROTGAMMAWAG
+    """
+}
+
+// Apply more human readable labels to the tree
+// Currently the labels are the SRRXXX this will
+//add the strain and species to the labels
+process annotate_tree{
+    tag "annotate_tree"
+    conda "envs/nf_python_scripts.yaml"
+    publishDir path: "nf_master_tree"
+
+    input:
+    tuple file(tree_one), file(tree_two), file(tree_three) from ch_annotate_tree_input
+
+    output:
+    tuple file("RAxML_bestTree.strain_dn_ds_named"), file("RAxML_bipartitionsBranchLabels.strain_dn_ds_named"), file("RAxML_bipartitions.strain_dn_ds_named") into ch_tree_for_dnds_input
+
+    script:
+    """
+    python3 ${params.bin_dir}/annotate_tree.py $tree_one $tree_two $tree_three
+    """
+}
+
+// ch_run_codeml_align_input.combine(ch_run_codeml_tree_input).subscribe {  println "Got: $it"  }
+// Here we create codeml control files.
+// Previously we were going to a lot of effort to incorporate
+// some sort of parallelisation. However, let's see if we can make use of nextflow
+// format here and run one instance per cds input.
+// When we run this we will check to see that there are sequences in the alignment and 
+// that the alignment is divisible by 3. If either of these assertions fails
+// we will exit without error. This means that the *.out file output needs to be optional
+process run_codeml{
+    tag "$cds_file"
+    conda "envs/nf_codeml.yaml"
+    publishDir path: "nf_codeml_out"
+    input:
+    tuple file(cds_file), file(tree) from ch_run_codeml_align_input.combine(ch_run_codeml_tree_input)
+    
+    output:
+    file "*_codeml_results.out" optional true into ch_collate_codeml_results_intput
+    script:
+    """
+    python3 ${params.bin_dir}/run_codeml.py $cds_file $tree
+    """
+}
+
+// ch_collate_codeml_results_intput.collect().subscribe {println "Got: $it"}
+process collate_codeml_results{
+    tag "collate_codeml_results"
+    conda "envs/nf_python_scripts.yaml"
+
+    input:
+    file codeml_out_file from ch_collate_codeml_results_intput.collect()
+    output:
+    file "codeml_results_df.csv" into ch_collate_codeml_results
+
+    script:
+    """
+    python3 ${params.bin_dir}/collate_codeml_results.py ${params.sra_list_as_csv}
     """
 }
