@@ -37,3 +37,7 @@ nf_trinity_assembly/
 nf_transdecoder/
 nf_sonicparanoid
 .vscode/
+nf_codeml_out/
+nf_local_alignments/
+nf_master_tree/
+nf_prot_out/
