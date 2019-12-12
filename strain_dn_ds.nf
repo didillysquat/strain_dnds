@@ -1,7 +1,4 @@
 #!/usr/bin/env nextflow
-// First download the .fastq files
-params.sra_list = ["SRR1793320", "SRR1793321", "SRR1793322", "SRR1793323", "SRR1793324", "SRR1793325", "SRR1793326", "SRR1793327", "SRR1795737", "SRR1795735"]
-params.sra_list_as_csv = "SRR1793320,SRR1793321,SRR1793322,SRR1793323,SRR1793324,SRR1793325,SRR1793326,SRR1793327,SRR1795737,SRR1795735"
 params.bin_dir = "${workflow.launchDir}/bin"
 params.launch_dir = "${workflow.launchDir}"
 Channel.fromList(params.sra_list).set{ch_download_fastq}
@@ -9,7 +6,7 @@ Channel.fromList(params.sra_list).set{ch_download_fastq}
 // when running in tmux. But this doesn't seem to happen outside of tmux
 process download_fastq{
     tag "${sra_id}"
-
+    conda "envs/nf_general.yaml"
     publishDir path: "raw_reads", mode: "copy"
 
     input:
@@ -27,7 +24,7 @@ process download_fastq{
 // Now gzip the fastq files
 process gzip_fastq{
     tag "${fastq_file_one}"
-
+    conda "envs/nf_general.yaml"
     publishDir path: "raw_reads", mode: "copy"
 
     input:
@@ -45,7 +42,7 @@ process gzip_fastq{
 // Now fastqc the files
 process fastqc_pre_trim{
     tag "${fastq_file}"
-
+    conda "envs/nf_general.yaml"
     publishDir path: "nf_fastqc_pre_trim", mode: "copy", saveAs: {filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
 
     input:
@@ -63,7 +60,7 @@ process fastqc_pre_trim{
 // Now trim the files
 process trimmomatic{
 	tag "${fastq_file_one}"
-
+    conda "envs/nf_general.yaml"
 	publishDir path: "nf_trimmed", mode: 'copy'
 
 	input:
@@ -90,7 +87,7 @@ process trimmomatic{
 // Now post-trim fastqc
 process fastqc_post_trim{
     tag "${fastq_file}"
-
+    conda "envs/nf_general.yaml"
     publishDir path: "nf_fastqc_post_trim", mode: "copy", saveAs: {filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
 
     input:
@@ -108,7 +105,7 @@ process fastqc_post_trim{
 // Now error correction
 process rcorrector{
     tag "${trimmed_read_one}"
-    
+    conda "envs/nf_general.yaml"
     cpus params.rcorrector_threads
     
     publishDir path: "nf_error_corrected", mode: "copy"
@@ -128,7 +125,7 @@ process rcorrector{
 // Now do the trinity assembly
 process trinity{
     tag "${corrected_read_one}"
-
+    conda "envs/nf_general.yaml"
     cpus params.trinity_threads
     conda "envs/nf_only_trinity.yaml"
     publishDir "nf_trinity_assembly/${corrected_read_one.getName().replaceAll('.trimmed_1P.cor.fq.gz','')}", mode: "copy"
@@ -186,7 +183,6 @@ process remove_short_isos{
 // To make the long_iso_orf files unique and related to their transcriptome we will append the srrname
 process orf_prediction{
     tag "${srrname}"
-
     conda "envs/nf_transdecoder.yaml"
     publishDir "nf_transdecoder/$srrname", mode: "copy"
 
