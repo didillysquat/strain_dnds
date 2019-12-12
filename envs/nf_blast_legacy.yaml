@@ -1,0 +1,5 @@
+name: blast_legacy
+channels:
+  - bioconda
+dependencies:
+  - blast-legacy
