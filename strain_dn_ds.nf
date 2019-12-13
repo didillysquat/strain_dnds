@@ -1,42 +1,90 @@
 #!/usr/bin/env nextflow
+
 params.bin_dir = "${workflow.launchDir}/bin"
 params.launch_dir = "${workflow.launchDir}"
-Channel.fromList(params.sra_list).set{ch_download_fastq}
-// We are getting an error when trying to initialize all 10 of the fastq-dump requests at once.
-// when running in tmux. But this doesn't seem to happen outside of tmux
-process download_fastq{
-    tag "${sra_id}"
-    conda "envs/nf_general.yaml"
-    publishDir path: "raw_reads", mode: "copy"
+params.tru_seq_pe_fasta_path = "${workflow.launchDir}/TruSeq3-PE.fa"
 
-    input:
-    val sra_id from ch_download_fastq
+// Originally we were downloading the fastqs but this was too unrelible.
+// There were constant time outs and other errors. As such I think it is
+// safest to start from a folder with fastq.gz file in it
+if (params.from_download){
+    Channel.fromList(params.sra_list).set{ch_download_fastq}
 
-    output:
-    file "*.fastq" into ch_gzip_fastq_input
+    // We are getting an error when trying to initialize all 10 of the fastq-dump requests at once.
+    // when running in tmux. But this doesn't seem to happen outside of tmux
+    process download_fastq{
+        tag "${sra_id}"
+        
+        publishDir path: "raw_reads", mode: "copy"
 
-    script:
-    """
-    fastq-dump --defline-seq '@\$sn[_\$rn]/\$ri' --split-files ${sra_id} -O .
-    """
-}
+        input:
+        val sra_id from ch_download_fastq
 
-// Now gzip the fastq files
-process gzip_fastq{
-    tag "${fastq_file_one}"
-    conda "envs/nf_general.yaml"
-    publishDir path: "raw_reads", mode: "copy"
+        output:
+        tuple file("*_1.fastq.gz"), file("*_2.fastq.gz") into ch_correct_fastq_name_format_input
 
-    input:
-    tuple file(fastq_file_one), file(fastq_file_two) from ch_gzip_fastq_input
+        script:
+        """
+        python3 ${params.bin_dir}/ena-fast-download.py $sra_id
+        """
+    }
 
-    output:
-    file "*.fastq.gz" into ch_make_fastqc_pre_trim, ch_trimmomatic_input
-    
-    script:
-    """
-    gzip -f $fastq_file_one $fastq_file_two
-    """
+    // Because we are now using this ena-fast-download
+    // we don't get to format the def line of the sequencing files
+    // in the same way that we coud with fastq-dump.
+    // The format required is quite specific and trimmomatic 
+    // will throw us errors if it is not correct.
+    // Here we will remove the SRRR part of the name before the space
+    // And re-write out the file.
+    process correct_fastq_name_format{
+        tag "$fastq_one"
+        input:
+        tuple file(fastq_one), file(fastq_two) from ch_correct_fastq_name_format_input
+
+        output:
+        tuple file("*_nf_1.fastq.gz"), file("*_nf_2.fastq.gz") into ch_rename_fastqs
+
+        script:
+        """
+        gunzip -f $fastq_one
+        gunzip -f $fastq_two
+        python3 ${params.bin_dir}/correct_fastq_name_format.py
+        gzip *.fastq
+        """
+    }
+
+    // Unfortunately in the above process we can't output the files with exaclty the same name as they
+    // are not detected by the search of output names.
+    // Becuase we want them to have the same name as the files
+    // that might have already been in a downloaded directory
+    // we will quickly modify the name in this process
+    process rename_fastq_files{
+        tag "$fastq_one"
+
+        input:
+        tuple file(fastq_one), file(fastq_two) from ch_rename_fastqs
+        
+        output:
+        tuple file("*_1.fastq.gz"), file("*_2.fastq.gz") into ch_fastqc_pre_trim, ch_trimmomatic_input
+
+        script:
+        new_name_one = fastq_one.getName().replaceAll('_nf_1.fastq.gz' ,'_1.fastq.gz')
+        new_name_two = fastq_two.getName().replaceAll('_nf_2.fastq.gz' ,'_2.fastq.gz')
+        """
+        mv $fastq_one $new_name_one
+        mv $fastq_two $new_name_two
+        """
+    }
+
+}else{
+    // Start from a directory that already contains fastq.gz files in paried sets
+    // TODO make this work with single read as well
+
+    // This will pair the SRR base with the tuple of the files.
+    // To match the format of the ch_make_trimmomatic_input
+    // We need to process this so that we get rid of the SRR component
+    // Probably best if we use map for this.
+    Channel.fromFilePairs("${params.raw_reads_dir}SRR*_{1,2}.fastq.gz").map(it[1]).set{ch_fastqc_pre_trim; ch_trimmomatic_input}
 }
 
 // Now fastqc the files
@@ -46,7 +94,7 @@ process fastqc_pre_trim{
     publishDir path: "nf_fastqc_pre_trim", mode: "copy", saveAs: {filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
 
     input:
-    file fastq_file from ch_make_fastqc_pre_trim.flatten()
+    file fastq_file from ch_fastqc_pre_trim.flatten()
 
     output:
     file "*_fastqc.{zip,html}" into ch_fastqc_pre_trim_output
