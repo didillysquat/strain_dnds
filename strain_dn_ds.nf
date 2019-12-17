@@ -258,7 +258,10 @@ process orf_prediction{
 process remove_multi_orfs_from_pep{
     tag "${pep_file}"
     conda "envs/nf_python_scripts.yaml"
-    publishDir "nf_sonicparanoid", mode: "copy"
+    publishDir "nf_sonicparanoid", mode: "copy", saveAs: {filename -> 
+                                                if (filename.indexOf(".single_orf.pep") > 0) "$filename"
+                                                else null
+                                                }
 
     input:
     tuple file(pep_file), file(cds_file) from ch_remove_multi_orfs_input
