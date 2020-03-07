@@ -5,6 +5,15 @@ params.sra_list_as_csv = "SRR1793320,SRR1793321,SRR1793322,SRR1793323,SRR1793324
 params.bin_dir = "${workflow.launchDir}/bin"
 params.launch_dir = "${workflow.launchDir}"
 Channel.fromList(params.sra_list).set{ch_download_fastq}
+
+// The path to the inparanoid executable
+params.inparanoid_path = "${workflow.launchDir}/inparanoid/inparanoid.pl"
+// The channel that holds the blast_parser file that we'll need to hav in the directory
+// when running in paranoid. We will combine this with the pep file channel
+Channel.fromPath("${workflow.launchDir}/inparanoid/blast_parser.pl").set{ch_run_inparanoid_blast_parser_input}
+
+// Conditional as to whether we want to run the inparanoid analysis in parallel
+params.do_inparanoid = true
 // We are getting an error when trying to initialize all 10 of the fastq-dump requests at once.
 // when running in tmux. But this doesn't seem to happen outside of tmux
 process download_fastq{
@@ -211,6 +220,8 @@ process orf_prediction{
 // ortholog prediction
 // Sonic Parnoid runs from a single directory containing all of the fastas
 // To enable this we will publish each of the fastas into a single directory
+//NB we were getting an error :No such variable: process without the parentheses
+// around the list of channels the file was being put into.
 process remove_multi_orfs_from_pep{
     tag "${pep_file}"
     conda "envs/nf_python_scripts.yaml"
@@ -221,7 +232,7 @@ process remove_multi_orfs_from_pep{
 
     output:
     //tuple file("*.single_orf.pep"), file(cds_file) into ch_sonic_paranoid_input
-    file("*.single_orf.pep") into ch_sonicparanoid_input
+    file("*.single_orf.pep") into (ch_sonicparanoid_input, ch_run_inparanoid_pep_input)
     file cds_file into ch_write_unaligned_cds_fastas_fas_input
     
     script:
@@ -229,6 +240,91 @@ process remove_multi_orfs_from_pep{
     
     "python3 ${params.bin_dir}/unique_orfs_from_pep.py $pep_file"
 }
+
+// First lets simply view the channel.
+ch_run_inparanoid_pep_input.collect().flatMap{
+        // new set that will hold the sub_sets of paired files
+        Set file_collection_set = []
+        // Create a subset form every pair of files that aren't the same file
+        // Putting these into a set will ensure that each pair is only combined once
+        // irrespective of order. e.g. [A,B] and [B,A] will not be found, only one or the other
+        for (i=0; i<(it.size()); i++){
+            for (j=0; j<(it.size()); j++){
+                if (it[i] != it[j]){
+                    Set subset = [it[i], it[j]]
+                    file_collection_set.add(subset)
+                }
+            }
+        }
+        // Create a new list that will hold the output pairs
+        List output_list = new ArrayList();
+        // For each of the subsets in the file_collection_set
+        // Convert it to a new list and add that list to the output_list
+        file_collection_set.each{item ->
+                                    List sub_set_list = new ArrayList();
+                                    sub_set_list.addAll(item);
+                                    output_list.add(sub_set_list)
+                                }
+        // Here we should have the output_list populated
+        return file_collection_set
+    }.combine(ch_run_inparanoid_blast_parser_input).view()
+
+// // Here I want to try to implement inparanoid and multi paranoid.
+// // The first stumbling block is trying to get the pairwise combinations of the pep
+// // files. I think our best bet is probably something to do with map.
+// // We have this working in theory on my local system and we now successfuly have inparnoid running.
+// // There are a couple of tricks to getting this working. You have to have legacy-blast setup
+// // so that inparanoid has access to blastall and formatdb. We can do this easily with a conda env.
+// // The other thing inparanoid needs access to is the blast_parser.pl script. As such we'll have to pass
+// // this file into the process the associated process.
+// // Other than that, we should be able to get this working.
+// // Another aspect we will need to work on is whether we want to do this inparnoid or not.
+// // It would be good to work with a conditional that can be set in the config file.
+// // Options could be classic, sonic or both. If both then we will fork the analysis
+// // from this point onwards.
+// process run_inparanoid_input{
+//     // We will have to have a check to see about the files name issues we have here.
+//     // I.e. having file names with the same names
+//     // It may be that we rename them in the next output
+//     conda "envs/nf_blast_legacy"
+
+//     input:
+//     // There is quite a lot of code here that is associated with getting
+//     // us the pairwise combinations of the pep files.
+//     // In addition to getting this into the correct format, we also need to have a copy
+//     // of inparnoids blast_parser.pl file. So, once we have the correct format of the 
+//     // ch_run_inparnoid_input we will need to do a .combine 
+//     // with the ch_run_inparanoid_blast_parser_input channel
+//     input:
+//     tuple file('fasta_a'), file('fasta_b') from ch_run_inparanoid_pep_input.collect().flatMap{
+//         // new set that will hold the sub_sets of paired files
+//         Set file_collection_set = []
+//         // Create a subset form every pair of files that aren't the same file
+//         // Putting these into a set will ensure that each pair is only combined once
+//         // irrespective of order. e.g. [A,B] and [B,A] will not be found, only one or the other
+//         for (i=0; i<(it.size()); i++){
+//             for (j=0; j<(it.size()); j++){
+//                 if (it[i] != it[j]){
+//                     Set subset = [it[i], it[j]]
+//                     file_collection_set.add(subset)
+//                 }
+//             }
+//         }
+//         // Create a new list that will hold the output pairs
+//         List output_list = new ArrayList();
+//         // For each of the subsets in the file_collection_set
+//         // Convert it to a new list and add that list to the output_list
+//         file_collection_set.each{item ->
+//                                     List sub_set_list = new ArrayList();
+//                                     sub_set_list.addAll(item);
+//                                     output_list.add(sub_set_list)
+//                                 }
+//         // Here we should have the output_list populated
+//         return file_collection_set
+//     }.combine(ch_run_inparanoid_blast_parser_input)
+    
+
+// }
 
 process sonicparanoid{
     tag "sonicparanoid"
@@ -283,6 +379,13 @@ process screen_sonicparnoid_output{
     python3 ${params.bin_dir}/screen_orthologs.py $single_copy_tsv
     """
 }
+
+// TODO at this point we should be able to get to exactly the same stage with the inparnoid
+// analysis. An ugly way to move forward from here will be to work with
+// two sets of processes, each of which is going to be held within an inparanoid
+// conditional.
+// I guess we could put all of these processess at the end of this script
+// and wrap them in a single conditional
 
 
 // Work through the screened_orthologs and for each ortholog make a directory
@@ -480,6 +583,7 @@ process run_codeml{
 process collate_codeml_results{
     tag "collate_codeml_results"
     conda "envs/nf_python_scripts.yaml"
+    publishDir path: "nf_dnds_df_summary"
 
     input:
     file codeml_out_file from ch_collate_codeml_results_intput.collect()
