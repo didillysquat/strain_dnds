@@ -41,3 +41,5 @@ nf_codeml_out/
 nf_local_alignments/
 nf_master_tree/
 nf_prot_out/
+inparanoid
+inparanoid_test/
