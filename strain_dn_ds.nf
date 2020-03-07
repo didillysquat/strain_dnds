@@ -1,64 +1,101 @@
 #!/usr/bin/env nextflow
-// First download the .fastq files
-params.sra_list = ["SRR1793320", "SRR1793321", "SRR1793322", "SRR1793323", "SRR1793324", "SRR1793325", "SRR1793326", "SRR1793327", "SRR1795737", "SRR1795735"]
-params.sra_list_as_csv = "SRR1793320,SRR1793321,SRR1793322,SRR1793323,SRR1793324,SRR1793325,SRR1793326,SRR1793327,SRR1795737,SRR1795735"
+
 params.bin_dir = "${workflow.launchDir}/bin"
 params.launch_dir = "${workflow.launchDir}"
-Channel.fromList(params.sra_list).set{ch_download_fastq}
+params.tru_seq_pe_fasta_path = "${workflow.launchDir}/TruSeq3-PE.fa"
 
-// The path to the inparanoid executable
-params.inparanoid_path = "${workflow.launchDir}/inparanoid/inparanoid.pl"
-// The channel that holds the blast_parser file that we'll need to hav in the directory
-// when running in paranoid. We will combine this with the pep file channel
-Channel.fromPath("${workflow.launchDir}/inparanoid/blast_parser.pl").set{ch_run_inparanoid_blast_parser_input}
+// Originally we were downloading the fastqs but this was too unrelible.
+// There were constant time outs and other errors. As such I think it is
+// safest to start from a folder with fastq.gz file in it
+if (params.from_download){
+    Channel.fromList(params.sra_list).set{ch_download_fastq}
 
-// Conditional as to whether we want to run the inparanoid analysis in parallel
-params.do_inparanoid = true
-// We are getting an error when trying to initialize all 10 of the fastq-dump requests at once.
-// when running in tmux. But this doesn't seem to happen outside of tmux
-process download_fastq{
-    tag "${sra_id}"
+    // We are getting an error when trying to initialize all 10 of the fastq-dump requests at once.
+    // when running in tmux. But this doesn't seem to happen outside of tmux
+    process download_fastq{
+        tag "${sra_id}"
+        
+        publishDir path: "raw_reads", mode: "copy"
 
-    publishDir path: "raw_reads", mode: "copy"
+        input:
+        val sra_id from ch_download_fastq
 
-    input:
-    val sra_id from ch_download_fastq
+        output:
+        tuple file("*_1.fastq.gz"), file("*_2.fastq.gz") into ch_correct_fastq_name_format_input
 
-    output:
-    file "*.fastq" into ch_gzip_fastq_input
+        script:
+        """
+        python3 ${params.bin_dir}/ena-fast-download.py $sra_id
+        """
+    }
 
-    script:
-    """
-    fastq-dump --defline-seq '@\$sn[_\$rn]/\$ri' --split-files ${sra_id} -O .
-    """
-}
+    // Because we are now using this ena-fast-download
+    // we don't get to format the def line of the sequencing files
+    // in the same way that we coud with fastq-dump.
+    // The format required is quite specific and trimmomatic 
+    // will throw us errors if it is not correct.
+    // Here we will remove the SRRR part of the name before the space
+    // And re-write out the file.
+    process correct_fastq_name_format{
+        tag "$fastq_one"
+        input:
+        tuple file(fastq_one), file(fastq_two) from ch_correct_fastq_name_format_input
 
-// Now gzip the fastq files
-process gzip_fastq{
-    tag "${fastq_file_one}"
+        output:
+        tuple file("*_nf_1.fastq.gz"), file("*_nf_2.fastq.gz") into ch_rename_fastqs
 
-    publishDir path: "raw_reads", mode: "copy"
+        script:
+        """
+        gunzip -f $fastq_one
+        gunzip -f $fastq_two
+        python3 ${params.bin_dir}/correct_fastq_name_format.py
+        gzip *.fastq
+        """
+    }
 
-    input:
-    tuple file(fastq_file_one), file(fastq_file_two) from ch_gzip_fastq_input
+    // Unfortunately in the above process we can't output the files with exaclty the same name as they
+    // are not detected by the search of output names.
+    // Becuase we want them to have the same name as the files
+    // that might have already been in a downloaded directory
+    // we will quickly modify the name in this process
+    process rename_fastq_files{
+        tag "$fastq_one"
 
-    output:
-    file "*.fastq.gz" into ch_make_fastqc_pre_trim, ch_trimmomatic_input
-    
-    script:
-    """
-    gzip -f $fastq_file_one $fastq_file_two
-    """
+        input:
+        tuple file(fastq_one), file(fastq_two) from ch_rename_fastqs
+        
+        output:
+        tuple file("*_1.fastq.gz"), file("*_2.fastq.gz") into ch_fastqc_pre_trim, ch_trimmomatic_input
+
+        script:
+        new_name_one = fastq_one.getName().replaceAll('_nf_1.fastq.gz' ,'_1.fastq.gz')
+        new_name_two = fastq_two.getName().replaceAll('_nf_2.fastq.gz' ,'_2.fastq.gz')
+        """
+        mv $fastq_one $new_name_one
+        mv $fastq_two $new_name_two
+        """
+    }
+
+}else{
+    // Start from a directory that already contains fastq.gz files in paried sets
+    // TODO make this work with single read as well
+
+    // This will pair the SRR base with the tuple of the files.
+    // To match the format of the ch_make_trimmomatic_input
+    // We need to process this so that we get rid of the SRR component
+    // Probably best if we use map for this.
+    Channel.fromFilePairs("${params.raw_reads_dir}SRR*_{1,2}.fastq.gz").map(it[1]).set{ch_fastqc_pre_trim; ch_trimmomatic_input}
+>>>>>>> 13a227c1d9eecfaeb5420a9203f84993238d0dfe
 }
 
 // Now fastqc the files
 process fastqc_pre_trim{
     tag "${fastq_file}"
-
+    conda "envs/nf_general.yaml"
     publishDir path: "nf_fastqc_pre_trim", mode: "copy", saveAs: {filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
 
     input:
-    file fastq_file from ch_make_fastqc_pre_trim.flatten()
+    file fastq_file from ch_fastqc_pre_trim.flatten()
 
     output:
     file "*_fastqc.{zip,html}" into ch_fastqc_pre_trim_output
@@ -72,7 +109,7 @@ process fastqc_pre_trim{
 // Now trim the files
 process trimmomatic{
 	tag "${fastq_file_one}"
-
+    conda "envs/nf_general.yaml"
 	publishDir path: "nf_trimmed", mode: 'copy'
 
 	input:
@@ -99,7 +136,7 @@ process trimmomatic{
 // Now post-trim fastqc
 process fastqc_post_trim{
     tag "${fastq_file}"
-
+    conda "envs/nf_general.yaml"
     publishDir path: "nf_fastqc_post_trim", mode: "copy", saveAs: {filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
 
     input:
@@ -117,7 +154,7 @@ process fastqc_post_trim{
 // Now error correction
 process rcorrector{
     tag "${trimmed_read_one}"
-    
+    conda "envs/nf_general.yaml"
     cpus params.rcorrector_threads
     
     publishDir path: "nf_error_corrected", mode: "copy"
@@ -137,7 +174,7 @@ process rcorrector{
 // Now do the trinity assembly
 process trinity{
     tag "${corrected_read_one}"
-
+    conda "envs/nf_general.yaml"
     cpus params.trinity_threads
     conda "envs/nf_only_trinity.yaml"
     publishDir "nf_trinity_assembly/${corrected_read_one.getName().replaceAll('.trimmed_1P.cor.fq.gz','')}", mode: "copy"
@@ -195,7 +232,6 @@ process remove_short_isos{
 // To make the long_iso_orf files unique and related to their transcriptome we will append the srrname
 process orf_prediction{
     tag "${srrname}"
-
     conda "envs/nf_transdecoder.yaml"
     publishDir "nf_transdecoder/$srrname", mode: "copy"
 
@@ -225,7 +261,10 @@ process orf_prediction{
 process remove_multi_orfs_from_pep{
     tag "${pep_file}"
     conda "envs/nf_python_scripts.yaml"
-    publishDir "nf_sonicparanoid", mode: "copy"
+    publishDir "nf_sonicparanoid", mode: "copy", saveAs: {filename -> 
+                                                if (filename.indexOf(".single_orf.pep") > 0) "$filename"
+                                                else null
+                                                }
 
     input:
     tuple file(pep_file), file(cds_file) from ch_remove_multi_orfs_input

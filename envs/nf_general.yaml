@@ -1,0 +1,9 @@
+name: nf_general
+channels:
+  - bioconda
+dependencies:
+  - sra-tools
+  - rcorrector
+  - fastqc
+  - trimmomatic
+  - trinity
