@@ -193,21 +193,18 @@ process rcorrector{
 // ambiguity in the previous naming system) to all being held in the nf_trinity_assembly dir.
 // I will make the changes by hand now to the outputs that are already in this directory.
 process trinity{
+    cache 'lenient'
     tag "${corrected_read_one}"
     conda "envs/nf_general.yaml"
     cpus params.trinity_threads
-    // conda "envs/nf_only_trinity.yaml"
     storeDir "nf_trinity_assembly"
 
     input:
     tuple file(corrected_read_one), file(corrected_read_two) from ch_trinity_input
 
     output:
-    file "*Trinity.fasta" into ch_remove_short_iso_forms_trinity_input
-    // Also put the corrected_read_one back into a channel and use it to derive the SRR
-    // base 
-    val "${corrected_read_one.getName().replaceAll('.trimmed_1P.cor.fq.gz','')}" into ch_remove_short_iso_forms_srr_name_input
-
+    file "${corrected_read_one.getName().replaceAll('.trimmed_1P.cor.fq.gz', '')}*Trinity.fasta" into ch_remove_short_iso_forms_trinity_input
+    
     script:
     // NB that the output directory for each trinity assembly must have 'trinity' in it.
     """
@@ -217,7 +214,17 @@ process trinity{
     """
 }
 
-ch_remove_short_iso_forms_trinity_input.view()
+// We will have to write a process for including the other transcriptomes here.
+// Basically, we will do a collect on the ch_remove_short_iso_forms_trinity_input channel
+// And then get merge this with a read in of two file paths
+// process add_new_trinity_assemblies{
+//     cache 'lenient'
+//     tag "add_new_trinity"
+//     conda "envs/nf_general.yaml"
+
+//     input:
+
+// }
 
 // // Now remove the short isos from the trinity assembly
 // // NB we were having problems getting the cache of this process to work.
@@ -230,101 +237,108 @@ ch_remove_short_iso_forms_trinity_input.view()
 // // I will look to see now whether the hash logs are looking at this new variable as a string or at
 // // the state of this directory. If they're looking at the state of the directory then caches may
 // // fail when we add additional script files to the /bin directory.
-// process remove_short_isos{
-//     tag "${trinity_assembly_fasta}"
+// This is where we will need to incorporate the new trinity assemblies.
+// I have tried to add the two additional transcriptomes by collecting mixing and flattening
+process remove_short_isos{
+    cache 'lenient'
+    tag "${trinity_assembly_fasta}"
 
-//     conda "envs/nf_python_scripts.yaml"
-//     publishDir "nf_trinity_assembly/$srrname", mode: "copy"
+    conda "envs/nf_python_scripts.yaml"
+    storeDir "nf_trinity_assembly"
 
-//     input:
-//     file trinity_assembly_fasta from ch_remove_short_iso_forms_trinity_input
-//     val srrname from ch_remove_short_iso_forms_srr_name_input
+    input:
+    file trinity_assembly_fasta from ch_remove_short_iso_forms_trinity_input.collect().mix(Channel.fromPath(["/home/humebc/projects/parky/breviolum_transcriptomes/nf_trinity_assembly/BreviolumB5_Sradians.trinity.Trinity.fasta", "/home/humebc/projects/parky/breviolum_transcriptomes/nf_trinity_assembly/Breviolumfaviinorum_Pclivosa.trinity.Trinity.fasta"])).flatten()
 
-//     output:
-//     file "*.long_iso_only.fasta" into ch_orf_prediction_input
-//     val srrname into ch_orf_prediction_srr_name
+    output:
+    file "${trinity_assembly_fasta.getName().replaceAll('.trinity.Trinity.fasta','')}*.long_iso_only.fasta" into ch_orf_prediction_input
     
-//     script:
-//     """
-//     python3 ${params.bin_dir}/remove_short_isos.py $trinity_assembly_fasta
-//     """
-// }
+    script:
+    """
+    python3 ${params.bin_dir}/remove_short_isos.py $trinity_assembly_fasta
+    """
+}
 
-// // Do ORF prediction using transdecoder
-// // Concurrently rename the default names output by transdecoder
-// // To make the long_iso_orf files unique and related to their transcriptome we will append the srrname
-// process orf_prediction{
-//     tag "${srrname}"
-//     conda "envs/nf_transdecoder.yaml"
-//     publishDir "nf_transdecoder/$srrname", mode: "copy"
 
-//     input:
-//     file long_iso_trinity from ch_orf_prediction_input
-//     val srrname from ch_orf_prediction_srr_name
-
-//     output:
-//     tuple file("*.pep"), file("*.cds") into ch_remove_multi_orfs_input
-
-//     script:
-//     """
-//     TransDecoder.LongOrfs -t $long_iso_trinity -O .
-//     mv longest_orfs.cds ${srrname}_longest_iso_orfs.cds
-//     mv longest_orfs.pep ${srrname}_longest_iso_orfs.pep
-//     """
-
-// }
-
-// // The transdecoder output can have multiple ORFs predicted per transcript
-// // We will once again only keep one representative per transcript and work with this for the
-// // ortholog prediction
-// // Sonic Parnoid runs from a single directory containing all of the fastas
-// // To enable this we will publish each of the fastas into a single directory
-// //NB we were getting an error :No such variable: process without the parentheses
-// // around the list of channels the file was being put into.
-// process remove_multi_orfs_from_pep{
-//     tag "${pep_file}"
-//     conda "envs/nf_python_scripts.yaml"
-//     publishDir "nf_sonicparanoid", mode: "copy", saveAs: {filename -> 
-//                                                 if (filename.indexOf(".single_orf.pep") > 0) "$filename"
-//                                                 else null
-//                                                 }
-
-//     input:
-//     tuple file(pep_file), file(cds_file) from ch_remove_multi_orfs_input
-
-//     output:
-//     //tuple file("*.single_orf.pep"), file(cds_file) into ch_sonic_paranoid_input
-//     file("*.single_orf.pep") into (ch_sonicparanoid_input, ch_run_inparanoid_pep_input)
-//     file cds_file into ch_write_unaligned_cds_fastas_fas_input
+// Do ORF prediction using transdecoder
+// Concurrently rename the default names output by transdecoder
+// To make the long_iso_orf files unique and related to their transcriptome we will append the srrname
+// NB 08/03/2020 I am going to modify the flow a little to reduce the redundancy.
+// I seem to be passing around the .cds and .pep file when only the .pep file is required.
+// The .cds is not required until later.
+process orf_prediction{
+    cache 'lenient'
+    tag "${srrname}"
+    conda "envs/nf_transdecoder.yaml"
+    storeDir "nf_transdecoder"
     
-//     script:
-//     output_path = pep_file.getName().replaceAll("longest_iso_orfs.pep", "longest_iso_orfs.single_orf.pep")
+    input:
+    file long_iso_trinity from ch_orf_prediction_input
+
+    output:
+    file "${long_iso_trinity.getName().replaceAll('.trinity.Trinity.long_iso_only.fasta','')}*.pep" into ch_remove_multi_orfs_input
+    file "${long_iso_trinity.getName().replaceAll('.trinity.Trinity.long_iso_only.fasta','')}*.cds" into ch_write_unaligned_cds_fastas_fas_input
     
-//     "python3 ${params.bin_dir}/unique_orfs_from_pep.py $pep_file"
-// }
+    script:
+    """
+    TransDecoder.LongOrfs -t $long_iso_trinity -O .
+    mv longest_orfs.cds ${long_iso_trinity.getName().replaceAll('.trinity.Trinity.long_iso_only.fasta','')}_longest_iso_orfs.cds
+    mv longest_orfs.pep ${long_iso_trinity.getName().replaceAll('.trinity.Trinity.long_iso_only.fasta','')}_longest_iso_orfs.pep
+    """
+}
 
 
-// process sonicparanoid{
-//     tag "sonicparanoid"
-//     cpus params.sonicparanoid_threads
-//     conda "envs/nf_sonicparanoid.yaml"
+// The transdecoder output can have multiple ORFs predicted per transcript
+// We will once again only keep one representative per transcript and work with this for the
+// ortholog prediction
+// Sonic Parnoid runs from a single directory containing all of the fastas
+// To enable this we will publish each of the fastas into a single directory
+process remove_multi_orfs_from_pep{
+    cache 'lenient'
+    tag "${pep_file}"
+    conda "envs/nf_python_scripts.yaml"
+    storeDir "nf_sonicparanoid"
+
+    input:
+    file pep_file from ch_remove_multi_orfs_input
+
+    output:
+    //tuple file("*.single_orf.pep"), file(cds_file) into ch_sonic_paranoid_input
+    file("${pep_file.getName().replaceAll('_longest_iso_orfs.pep','')}*.single_orf.pep") into ch_sonicparanoid_input
     
-//     input:
-//     // We won't actually use this input. It is just here to link
-//     // The processes
-//     file pep_file from ch_sonicparanoid_input.collect()
+    script:
+    output_path = pep_file.getName().replaceAll("longest_iso_orfs.pep", "longest_iso_orfs.single_orf.pep")
+    
+    "python3 ${params.bin_dir}/unique_orfs_from_pep.py $pep_file"
+}
 
-//     output:
-//     file "**single-copy_groups.tsv" into ch_rename_sonicparanoid_output_input
+// NB 08/03/2020 I have changed this so that we can skip the rename_sonicparanoid_output process
+// by writing in a find expression that moves the required single-copy_groups.tsv file to the current directory
+// THis way the file can be output without all of the attached containing directories.
+process sonicparanoid{
+    cache 'lenient'
+    tag "sonicparanoid"
+    cpus params.sonicparanoid_threads
+    conda "envs/nf_sonicparanoid.yaml"
+    storeDir "nf_sonicparanoid/output_12"
+    
+    input:
+    // We won't actually use this input. It is just here to link
+    // The processes
+    file pep_file from ch_sonicparanoid_input.collect()
 
-//     script:
-//     """
-//     sonicparanoid -i ${params.launch_dir}/nf_sonicparanoid -o . -t ${task.cpus}
-//     """
-// }
+    output:
+    file "single-copy_groups.tsv" into ch_screen_sonicparanoid_output_input
+
+    script:
+    """
+    sonicparanoid -i ${params.launch_dir}/nf_sonicparanoid -o . -t ${task.cpus}
+    find . -name single-copy_groups.tsv | xargs -I {} mv {} .
+    """
+}
 
 // // The sonicparanoid file we want (single-copy_groups.tsv) is buried in a number of directories
 // // Here we will get rid of all of the directories and rebulish just the file
+// Hopefully we will no longer need this process.
 // process rename_sonicparanoid_output{
 //     tag "rename sonicparanoid output"
 //     publishDir path: "nf_sonicparanoid/output_10", mode: "copy"
@@ -344,7 +358,7 @@ ch_remove_short_iso_forms_trinity_input.view()
 // process screen_sonicparnoid_output{
 //     tag "screen sonicparanoid"
 //     conda "envs/nf_python_scripts.yaml"
-//     publishDir path: "nf_sonicparanoid/output_10", mode: "copy"
+//     storeDir "nf_sonicparanoid/output_10"
 
 //     input:
 //     file single_copy_tsv from ch_screen_sonicparanoid_output_input
@@ -358,13 +372,6 @@ ch_remove_short_iso_forms_trinity_input.view()
 //     """
 // }
 
-// // TODO at this point we should be able to get to exactly the same stage with the inparnoid
-// // analysis. An ugly way to move forward from here will be to work with
-// // two sets of processes, each of which is going to be held within an inparanoid
-// // conditional.
-// // I guess we could put all of these processess at the end of this script
-// // and wrap them in a single conditional
-
 
 // // Work through the screened_orthologs and for each ortholog make a directory
 // // and write out a fasta that contains the sequence for each of the strains
@@ -375,6 +382,7 @@ ch_remove_short_iso_forms_trinity_input.view()
 // // The cds files that we will be getting the sequences from are all prefixed
 // // with the SRRXXX (e.g. SRR1793320_longest_iso_orfs.cds). As such we can use
 // // this SRRXXX in the python script to map between the table and the .cds files
+// // TODO, this will need modifying for the new transcriptomes.
 // process write_unaligned_cds_fastas{
 //     tag "write_unaligned_cds_fastas"
 //     conda "envs/nf_python_scripts.yaml"
