@@ -20,7 +20,7 @@ class WriteOutFastas:
         # rename the headers so that they are only the strain IDs
         # They are currently e.g. SRR1793320_longest_iso_orfs.single_orf.pep
         # This will make them SRR1793320
-        self.strain_names = [head.split('_')[0] for head in list(self.orth_df)]
+        self.strain_names = [head.replace('_longest_iso_orfs.single_orf.pep', '') for head in list(self.orth_df)]
         self.orth_df.columns = self.strain_names
         # Make a dict so that we can quickly grab the sequence (nucleotide not protein) of a transcipt in question
         # it will be a nested dict so that first key is strain and second it transcript name
@@ -42,11 +42,12 @@ class WriteOutFastas:
 
     def write_out_fasta(self):
         # We will work through the orth_df and write
+        # 090320 I am modifying this so that we write the files out directly to the directory
+        # rather than having a new subdirectory for each gene
         print("writing out local unaligned fastas")
         for ind, ser in self.orth_df.iterrows():
             sys.stdout.write(f"\r{ind}")
-            orth_group_output_dir = str(ind)
-            orth_group_unaligned_fasta_path = os.path.join(orth_group_output_dir, f'{ind}_unaligned_cds.fasta')
+            orth_group_unaligned_fasta_path = f'{ind}_unaligned_cds.fasta'
             fasta = []
             non_three = False
             for strain_name in self.strain_names:
@@ -58,7 +59,6 @@ class WriteOutFastas:
             if non_three:
                 self.non_three_orth_groups.append(str(ind))
                 continue
-            os.makedirs(orth_group_output_dir, exist_ok=True)
             with open(orth_group_unaligned_fasta_path, 'w') as f:
                 for line in fasta:
                     f.write(f'{line}\n')

@@ -91,8 +91,8 @@ class MasterAlignment:
         with open(an_aa_alignment_path, 'r') as f:
             lines_list = [line.rstrip() for line in f]
         # The below should produce e.g. ['>SRR1793324', '', '>SRR1793325', '', '>SRR1793326', '', '>SRR1793327', ''] (for four strains)
-        master_fasta = [f">{lines_list[i].split('_')[1]}" if (i%2 == 0) else '' for i in range(len(lines_list))]
-        # master_fasta = ['>SRR1793324', '', '>SRR1793325', '', '>SRR1793326', '', '>SRR1793327', '']
+        master_fasta = [f">{'_'.join(lines_list[i].split('_')[1:])}" if (i%2 == 0) else '' for i in range(len(lines_list))]
+        # master_fasta = ['>BreviolumB5_Sradians', '', '>Breviolumfaviinorum_Pclivosa', '', '>SRR1793324', '', '>SRR1793325', '', '>SRR1793326', '', '>SRR1793327', '']
 
         # The q file will hold the information for the partitioning of the alignment for the raxml analysis
         q_file = []

@@ -45,3 +45,4 @@ inparanoid
 inparanoid_test/
 codeml_results_df.csv
 backup_10/
+nf_master_fasta_and_q_file

@@ -311,9 +311,7 @@ process remove_multi_orfs_from_pep{
     "python3 ${params.bin_dir}/unique_orfs_from_pep.py $pep_file"
 }
 
-// NB 08/03/2020 I have changed this so that we can skip the rename_sonicparanoid_output process
-// by writing in a find expression that moves the required single-copy_groups.tsv file to the current directory
-// THis way the file can be output without all of the attached containing directories.
+
 process sonicparanoid{
     cache 'lenient'
     tag "sonicparanoid"
@@ -336,234 +334,215 @@ process sonicparanoid{
     """
 }
 
-// // The sonicparanoid file we want (single-copy_groups.tsv) is buried in a number of directories
-// // Here we will get rid of all of the directories and rebulish just the file
-// Hopefully we will no longer need this process.
-// process rename_sonicparanoid_output{
-//     tag "rename sonicparanoid output"
-//     publishDir path: "nf_sonicparanoid/output_10", mode: "copy"
 
-//     input:
-//     file sonic_long_out from ch_rename_sonicparanoid_output_input
+// The sonic paranoid output table contains orthologs that were not found in all of the transciptomes
+// We will drop these orthologs and write out the .tsv again
+process screen_sonicparnoid_output{
+    tag "screen sonicparanoid"
+    conda "envs/nf_python_scripts.yaml"
+    storeDir "nf_sonicparanoid/output_12"
 
-//     output:
-//     file sonic_long_out into ch_screen_sonicparanoid_output_input
+    input:
+    file single_copy_tsv from ch_screen_sonicparanoid_output_input
 
-//     script:
-//     "echo renamingDone"
-// }
+    output:
+    file "screened_orthologs.tsv" into ch_write_unaligned_cds_fastas_tab_input
 
-// // The sonic paranoid output table contains orthologs that were not found in all of the transciptomes
-// // We will drop these orthologs and write out the .tsv again
-// process screen_sonicparnoid_output{
-//     tag "screen sonicparanoid"
-//     conda "envs/nf_python_scripts.yaml"
-//     storeDir "nf_sonicparanoid/output_10"
-
-//     input:
-//     file single_copy_tsv from ch_screen_sonicparanoid_output_input
-
-//     output:
-//     file "screened_orthologs.tsv" into ch_write_unaligned_cds_fastas_tab_input
-
-//     script:
-//     """
-//     python3 ${params.bin_dir}/screen_orthologs.py $single_copy_tsv
-//     """
-// }
+    script:
+    """
+    python3 ${params.bin_dir}/screen_orthologs.py $single_copy_tsv
+    """
+}
 
 
-// // Work through the screened_orthologs and for each ortholog make a directory
-// // and write out a fasta that contains the sequence for each of the strains
-// // Input to the script will be the .tsv. Each of the .cds fastas will be
-// // in the nextflow working directory due to the channel input
-// // The column titles of the screened ortholog .tsv are the .pep file
-// // names (e.g. SRR1793320_longest_iso_orfs.single_orf.pep)
-// // The cds files that we will be getting the sequences from are all prefixed
-// // with the SRRXXX (e.g. SRR1793320_longest_iso_orfs.cds). As such we can use
-// // this SRRXXX in the python script to map between the table and the .cds files
-// // TODO, this will need modifying for the new transcriptomes.
-// process write_unaligned_cds_fastas{
-//     tag "write_unaligned_cds_fastas"
-//     conda "envs/nf_python_scripts.yaml"
-//     publishDir path: "nf_local_alignments", mode: "copy"
+// Work through the screened_orthologs and for each ortholog make a directory
+// and write out a fasta that contains the sequence for each of the strains
+// Input to the script will be the .tsv. Each of the .cds fastas will be
+// in the nextflow working directory due to the channel input
+// The column titles of the screened ortholog .tsv are the .pep file
+// names (e.g. SRR1793320_longest_iso_orfs.single_orf.pep)
+// The cds files that we will be getting the sequences from are all prefixed
+// with the SRRXXX (e.g. SRR1793320_longest_iso_orfs.cds). As such we can use
+// this SRRXXX in the python script to map between the table and the .cds files
+process write_unaligned_cds_fastas{
+    tag "write_unaligned_cds_fastas"
+    conda "envs/nf_python_scripts.yaml"
+    storeDir "nf_local_alignments"
     
-//     input:
-//     file screened_orth_table from ch_write_unaligned_cds_fastas_tab_input
-//     file cds_fastas from ch_write_unaligned_cds_fastas_fas_input.collect()
+    input:
+    file screened_orth_table from ch_write_unaligned_cds_fastas_tab_input
+    file cds_fastas from ch_write_unaligned_cds_fastas_fas_input.collect()
 
-//     output:
-//     file "**/*_unaligned_cds.fasta" into ch_align_using_guidance_input
+    output:
+    file "*_unaligned_cds.fasta" into ch_align_using_guidance_input
 
-//     script:
-//     """
-//     python3 ${params.bin_dir}/write_out_unaligned_cds_fastas.py $screened_orth_table
-//     """
-// }
+    script:
+    """
+    python3 ${params.bin_dir}/write_out_unaligned_cds_fastas.py $screened_orth_table
+    """
+}
 
-// // Align each of the unaligned cds files.
-// // We will do this in two processes.
-// // First we will perform the guidance analysis
-// // Then we will use the three output files to create the aligned fastas
-// // That have been cropped and had the appropriate low quality columns dropped
-// // As always, Guidance is proving tricky to get to run
-// // We have had to explicityly add per-bioperl to the env yaml
-// // Then, the bash wrapper for the perl execution of the guidance.pl
-// // is not working so you have to explicityly run perl and the full path to guidance.pl
-// // Because we can't know what the full path is, we will write a quick python script
-// // to find this out and run it.
-// // Guidance seems to be quite unstable. It seems to produce errors for no reason.
-// // However, the pipeline can simply be restarted and everything seems to behave OK.
-// // As such I have now implemented an automatic retry process where the python
-// // script will attempt to re-run the guidance analysis in question before quitting.
-// process align_using_guidance{
-//     tag "${unaligned_fasta.toString().split('_')[0]}"
-//     conda "envs/nf_guidance.yaml"
+// Align each of the unaligned cds files.
+// We will do this in two processes.
+// First we will perform the guidance analysis
+// Then we will use the three output files to create the aligned fastas
+// That have been cropped and had the appropriate low quality columns dropped
+// As always, Guidance is proving tricky to get to run
+// We have had to explicityly add per-bioperl to the env yaml
+// Then, the bash wrapper for the perl execution of the guidance.pl
+// is not working so you have to explicityly run perl and the full path to guidance.pl
+// Because we can't know what the full path is, we will write a quick python script
+// to find this out and run it.
+// Guidance seems to be quite unstable. It seems to produce errors for no reason.
+// However, the pipeline can simply be restarted and everything seems to behave OK.
+// As such I have now implemented an automatic retry process where the python
+// script will attempt to re-run the guidance analysis in question before quitting.
+process align_using_guidance{
+    tag "${unaligned_fasta.toString().split('_')[0]}"
+    conda "envs/nf_guidance.yaml"
+    storeDir "nf_local_alignments"
+    input:
+    file unaligned_fasta from ch_align_using_guidance_input.flatten()
 
-//     input:
-//     file unaligned_fasta from ch_align_using_guidance_input.flatten()
+    output:
+    tuple file("${unaligned_fasta.toString().split('_')[0]}*.MAFFT.Guidance2_res_pair_res.PROT.scr"), file("${unaligned_fasta.toString().split('_')[0]}*.MAFFT.PROT.aln"), file("${unaligned_fasta.toString().split('_')[0]}*.MAFFT.aln.With_Names") into ch_process_guidance_output_input
 
-//     output:
-//     tuple file("*.MAFFT.Guidance2_res_pair_res.PROT.scr"), file("*.MAFFT.PROT.aln"), file("*.MAFFT.aln.With_Names") into ch_process_guidance_output_input
+    script:
+    orth_group_id = unaligned_fasta.toString().split('_')[0]
+    """
+    python3 ${params.bin_dir}/run_guidance.py $unaligned_fasta
+    """
+}
 
-//     script:
-//     orth_group_id = unaligned_fasta.toString().split('_')[0]
-//     """
-//     python3 ${params.bin_dir}/run_guidance.py $unaligned_fasta
-//     """
-// }
+// This process will use the three ouput files from align_using_guidance
+process process_guidance_output{
+    tag "${aa_cols_score_file_path.toString().split("/")[-1].split(/\./)[0]}"
+    storeDir "nf_local_alignments"
 
-// // This process will use the three ouput files from align_using_guidance
-// process process_guidance_output{
-//     // We want to publish each of the output files into the corresponding ortholog directory
-//     // So here we will attempt to use the closure to extract the ortholog number
-//     /// and assign the publication directory accrodingly.
-//     tag "${aa_cols_score_file_path.toString().split('_')[0]}"
-//     publishDir path: "nf_local_alignments", mode: "copy", saveAs:   {filename -> def orth_id = filename.split('_')[0]
-//                                                                                 return "$orth_id/$filename"}
+    input:
+    tuple file(aa_cols_score_file_path), file(aa_alignment_file_path), file(cds_alignment_file_path) from ch_process_guidance_output_input
 
-//     input:
-//     tuple file(aa_cols_score_file_path), file(aa_alignment_file_path), file(cds_alignment_file_path) from ch_process_guidance_output_input
+    output:
+    file "${aa_cols_score_file_path.toString().split("/")[-1].split(/\./)[0]}*_cropped_aligned_aa.fasta" into ch_model_test_input
+    file "${aa_cols_score_file_path.toString().split("/")[-1].split(/\./)[0]}*_cropped_aligned_cds.fasta" into ch_run_codeml_align_input
 
-//     output:
-//     file "*_cropped_aligned_aa.fasta" into ch_model_test_input
-//     file "*_cropped_aligned_cds.fasta" into ch_run_codeml_align_input
+    script:
+    """
+    python3 ${params.bin_dir}/process_guidance_output.py $aa_cols_score_file_path $aa_alignment_file_path $cds_alignment_file_path
+    """
+}
 
-//     script:
-//     """
-//     python3 ${params.bin_dir}/process_guidance_output.py $aa_cols_score_file_path $aa_alignment_file_path $cds_alignment_file_path
-//     """
-// }
 
-// // Now find the best protein evo model
-// // In some cases the fasta files that resulted from the process_guidance_output may be empty
-// // As such we will wrap the modeltest-ng running in a python script that will check for this.
-// // If there is this problem with the aligned fasta then we will return code 0
-// // before making sure to delete any *.out file that might have been made
-// // We will make it so that the *_prottest_result.out is output empty.
-// // We can then check for the empty .out file in the make_master_alignment
-// process model_test{
-//     tag "${cropped_aligned_aa_fasta.toString().split('_')[0]}"
-//     conda "envs/nf_modeltest-ng.yaml"
-//     publishDir path: "nf_prot_out"
+// Now find the best protein evo model
+// In some cases the fasta files that resulted from the process_guidance_output may be empty
+// As such we will wrap the modeltest-ng running in a python script that will check for this.
+// If there is this problem with the aligned fasta then we will return code 0
+// before making sure to delete any *.out file that might have been made
+// We will make it so that the *_prottest_result.out is output empty.
+// We can then check for the empty .out file in the make_master_alignment
+process model_test{
+    tag "${cropped_aligned_aa_fasta.toString().split('_')[0]}"
+    conda "envs/nf_modeltest-ng.yaml"
+    storeDir "nf_prot_out"
 
-//     input:
-//     file cropped_aligned_aa_fasta from ch_model_test_input
+    input:
+    file cropped_aligned_aa_fasta from ch_model_test_input
 
-//     output:
-//     tuple file("*_prottest_result.out"), file(cropped_aligned_aa_fasta) into ch_make_master_alignment_input
-//     val "nf_prot_out" into ch_make_master_alignment_dir_input
-//     script:
-//     """
-//     python3 ${params.bin_dir}/run_model_test.py $cropped_aligned_aa_fasta
-//     """
-// }
+    output:
+    tuple file("${cropped_aligned_aa_fasta.toString().split('_')[0]}*_prottest_result.out"), file(cropped_aligned_aa_fasta) into ch_make_master_alignment_input
+
+    script:
+    """
+    python3 ${params.bin_dir}/run_model_test.py $cropped_aligned_aa_fasta
+    """
+}
 
 // // ch_make_master_alignment_input.collect().subscribe {  println "Got: $it"  }
 
-// // To make the master tree we will work witha single process that
-// // will need to iterthrough each of the protein model outputs.
-// // It will also need access to the aa cropped and alignment files
-// // We will supply both of these in two seperate input channels
-// // The output will be a master fasta and a q file for raxml that delimits the partions
-// // that can then be fed into the treemaking
-// process make_master_alignment_and_q_file{
-//     tag "make_master_alignment"
-//     conda "envs/nf_python_scripts.yaml"
+// To make the master tree we will work witha single process that
+// will need to iterthrough each of the protein model outputs.
+// It will also need access to the aa cropped and alignment files
+// We will supply both of these in two seperate input channels
+// The output will be a master fasta and a q file for raxml that delimits the partitions
+// that can then be fed into the treemaking
+process make_master_alignment_and_q_file{
+    tag "make_master_alignment"
+    conda "envs/nf_python_scripts.yaml"
+    storeDir "nf_master_fasta_and_q_file"
 
-//     input:
-//     val nf_prot_out_dir from ch_make_master_alignment_dir_input.collect()
+    input:
+    file out_and_aligned_fasta_files from ch_make_master_alignment_input.collect()
 
-//     output:
-//     tuple file("master_fasta_for_tree.fasta"), file("q_partition_file.q") into ch_make_tree_input
+    output:
+    tuple file("master_fasta_for_tree.fasta"), file("q_partition_file.q") into ch_make_tree_input
 
-//     script:
-//     """
-//     python3 ${params.bin_dir}/make_master_alignment.py ${params.launch_dir}/${nf_prot_out_dir[0]}
-//     """
-// }
+    script:
+    """
+    python3 ${params.bin_dir}/make_master_alignment.py ${params.launch_dir}/nf_prot_out
+    """
+}
 
-// // Make a ML tree using raxml
-// process make_tree{
-//     tag "make_tree"
-//     cpus params.raxml_threads
-//     conda "envs/nf_raxml.yaml"
+// Make a ML tree using raxml
+process make_tree{
+    tag "make_tree"
+    cpus params.raxml_threads
+    conda "envs/nf_raxml.yaml"
+    storeDir "nf_master_tree"
 
-//     input:
-//     tuple file(master_fasta), file(q_partition_file) from ch_make_tree_input
+    input:
+    tuple file(master_fasta), file(q_partition_file) from ch_make_tree_input
 
-//     output:
-//     tuple file("RAxML_bestTree.strain_dn_ds"), file("RAxML_bipartitionsBranchLabels.strain_dn_ds"), file("RAxML_bipartitions.strain_dn_ds") into ch_annotate_tree_input
-//     file "RAxML_bestTree.strain_dn_ds" into ch_run_codeml_tree_input
-//     script:
-//     """
-//     raxmlHPC-PTHREADS-AVX2 -s $master_fasta -q $q_partition_file -x 183746 -f a, -p \\
-//     83746273 -# 1000 -T ${task.cpus} -n strain_dn_ds -m PROTGAMMAWAG
-//     """
-// }
+    output:
+    tuple file("RAxML_bestTree.strain_dn_ds"), file("RAxML_bipartitionsBranchLabels.strain_dn_ds"), file("RAxML_bipartitions.strain_dn_ds") into ch_annotate_tree_input
+    file "RAxML_bestTree.strain_dn_ds" into ch_run_codeml_tree_input
+    script:
+    """
+    raxmlHPC-PTHREADS-AVX2 -s $master_fasta -q $q_partition_file -x 183746 -f a, -p \\
+    83746273 -# 1000 -T ${task.cpus} -n strain_dn_ds -m PROTGAMMAWAG
+    """
+}
 
-// // Apply more human readable labels to the tree
-// // Currently the labels are the SRRXXX this will
-// //add the strain and species to the labels
-// process annotate_tree{
-//     tag "annotate_tree"
-//     conda "envs/nf_python_scripts.yaml"
-//     publishDir path: "nf_master_tree"
+// Apply more human readable labels to the tree
+// Currently the labels are the SRRXXX this will
+//add the strain and species to the labels
+process annotate_tree{
+    tag "annotate_tree"
+    conda "envs/nf_python_scripts.yaml"
+    storeDir "nf_master_tree"
 
-//     input:
-//     tuple file(tree_one), file(tree_two), file(tree_three) from ch_annotate_tree_input
+    input:
+    tuple file(tree_one), file(tree_two), file(tree_three) from ch_annotate_tree_input
 
-//     output:
-//     tuple file("RAxML_bestTree.strain_dn_ds_named"), file("RAxML_bipartitionsBranchLabels.strain_dn_ds_named"), file("RAxML_bipartitions.strain_dn_ds_named") into ch_tree_for_dnds_input
+    output:
+    tuple file("RAxML_bestTree.strain_dn_ds_named"), file("RAxML_bipartitionsBranchLabels.strain_dn_ds_named"), file("RAxML_bipartitions.strain_dn_ds_named") into ch_tree_for_dnds_output
 
-//     script:
-//     """
-//     python3 ${params.bin_dir}/annotate_tree.py $tree_one $tree_two $tree_three
-//     """
-// }
+    script:
+    """
+    python3 ${params.bin_dir}/annotate_tree.py $tree_one $tree_two $tree_three
+    """
+}
 
-// // ch_run_codeml_align_input.combine(ch_run_codeml_tree_input).subscribe {  println "Got: $it"  }
-// // Here we create codeml control files.
-// // Previously we were going to a lot of effort to incorporate
-// // some sort of parallelisation. However, let's see if we can make use of nextflow
-// // format here and run one instance per cds input.
-// // When we run this we will check to see that there are sequences in the alignment and 
-// // that the alignment is divisible by 3. If either of these assertions fails
-// // we will exit without error. This means that the *.out file output needs to be optional
-// process run_codeml{
-//     tag "$cds_file"
-//     conda "envs/nf_codeml.yaml"
-//     publishDir path: "nf_codeml_out"
-//     input:
-//     tuple file(cds_file), file(tree) from ch_run_codeml_align_input.combine(ch_run_codeml_tree_input)
+// Here we create codeml control files.
+// Previously we were going to a lot of effort to incorporate
+// some sort of parallelisation. However, let's see if we can make use of nextflow
+// format here and run one instance per cds input.
+// When we run this we will check to see that there are sequences in the alignment and 
+// that the alignment is divisible by 3. If either of these assertions fails
+// we will exit without error. This means that the *.out file output needs to be optional
+process run_codeml{
+    tag "$cds_file"
+    conda "envs/nf_codeml.yaml"
+    storeDir "nf_codeml_out"
+    input:
+    tuple file(cds_file), file(tree) from ch_run_codeml_align_input.combine(ch_run_codeml_tree_input)
     
-//     output:
-//     file "*_codeml_results.out" optional true into ch_collate_codeml_results_intput
-//     script:
-//     """
-//     python3 ${params.bin_dir}/run_codeml.py $cds_file $tree
-//     """
-// }
+    output:
+    file "${cds_file.toString().split('_')[0]}*_codeml_results.out" optional true into ch_collate_codeml_results_intput
+    script:
+    """
+    python3 ${params.bin_dir}/run_codeml.py $cds_file $tree
+    """
+}
 
 // // ch_collate_codeml_results_intput.collect().subscribe {println "Got: $it"}
 // process collate_codeml_results{
