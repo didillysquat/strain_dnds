@@ -16,7 +16,7 @@ class MakeCodemlSumDF:
         self.dict_of_dnds_values = {}
         self.num_combinations = len(list(itertools.combinations(self.strain_list, 2)))
         self.data_reg_ex = re.compile('dN/dS\s*=\s*([0-9]+\.[0-9]+)\s+dN\s*=\s*([0-9]+\.[0-9]+)\s+dS\s*=\s*([0-9]+\.[0-9]+)')
-        self.names_reg_ex = re.compile('\(([0-9]+)_(SRR[0-9]+)\).+\([0-9]+_(SRR[0-9]+)\)')
+        self.names_reg_ex = re.compile('\(([0-9]+)_(\S+)\).+\([0-9]+_(\S+)\)')
 
     def _populate_codeml_out_path_list(self):
         files = list(os.walk('.'))[0][2]

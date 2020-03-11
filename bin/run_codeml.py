@@ -95,12 +95,19 @@ class RunCODEML:
         subprocess.run(args=['codeml', self.ctrl_path])
 
 cml = RunCODEML()
+# We will write out a status file whether this was successful or not
+# This is so that the process will be forced to run as the .out file is optional
+# We will make it so that the <id>_status.txt id mandatory 
 try:
     cml.generate_block_phylip_alignments_for_CODEML()
     cml.run_codeml()
+    with open(f'{cml.orth_id}_status.txt', 'w') as f:
+        f.write('0\n')
 except:
     # We have set the script to raise RuntimeError if the cds alignment is
     # empty or is not divisible by 3
     # If this happens we want to exit out
     # There will not have been a codeml output file produced
+    with open(f'{cml.orth_id}_status.txt', 'w') as f:
+        f.write('1\n')
     pass

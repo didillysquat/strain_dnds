@@ -529,6 +529,10 @@ process annotate_tree{
 // When we run this we will check to see that there are sequences in the alignment and 
 // that the alignment is divisible by 3. If either of these assertions fails
 // we will exit without error. This means that the *.out file output needs to be optional
+// Having an optional *.out file causes issues for storeDir as it causes all process to skip
+// rather than look for a .out file. To work around this we have written in the output
+// of a file called status.txt that will hold a '0' or a '1' depending on whether the
+// process caused an error or not. This way the process will be forced to run
 process run_codeml{
     tag "$cds_file"
     conda "envs/nf_codeml.yaml"
@@ -538,25 +542,25 @@ process run_codeml{
     
     output:
     file "${cds_file.toString().split('_')[0]}*_codeml_results.out" optional true into ch_collate_codeml_results_intput
+    file "${cds_file.toString().split('_')[0]}_status.txt" into ch_force_process_run_output
     script:
     """
     python3 ${params.bin_dir}/run_codeml.py $cds_file $tree
     """
 }
 
-// // ch_collate_codeml_results_intput.collect().subscribe {println "Got: $it"}
-// process collate_codeml_results{
-//     tag "collate_codeml_results"
-//     conda "envs/nf_python_scripts.yaml"
-//     publishDir path: "nf_dnds_df_summary"
+process collate_codeml_results{
+    tag "collate_codeml_results"
+    conda "envs/nf_python_scripts.yaml"
+    storeDir "nf_dnds_df_summary"
 
-//     input:
-//     file codeml_out_file from ch_collate_codeml_results_intput.collect()
-//     output:
-//     file "codeml_results_df.csv" into ch_collate_codeml_results
+    input:
+    file codeml_out_file from ch_collate_codeml_results_intput.collect()
+    output:
+    file "codeml_results_df.csv" into ch_collate_codeml_results
 
-//     script:
-//     """
-//     python3 ${params.bin_dir}/collate_codeml_results.py ${params.sra_list_as_csv}
-//     """
-// }
+    script:
+    """
+    python3 ${params.bin_dir}/collate_codeml_results.py ${params.sra_list_as_csv}
+    """
+}

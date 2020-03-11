@@ -46,3 +46,5 @@ inparanoid_test/
 codeml_results_df.csv
 backup_10/
 nf_master_fasta_and_q_file
+nf_dnds_df_summary/
+bin/clean_up_pep_files.py
