@@ -4,14 +4,54 @@
 // I have created directories that hold symlinks to either the 4 seq set or to the 10 seq set.
 // Use these directories to work with either the 4 or 10 samples set.
 // For the 4 or 4 + 2 analysis:
-params.raw_reads_dir = "/home/humebc/projects/parky/breviolum_transcriptomes/raw_reads/4"
-// For the 10 or 10 + 2 analysis:
-// params.raw_reads_dir = "/home/humebc/projects/parky/breviolum_transcriptomes/raw_reads/10"
-// params.sra_list = ["b_min_c", "b_min_c", "b_aenig", "b_pseudo"]
-// For the 10 or 10 + 2 analysis:
-// params.sra_list = ["b_min_0", "b_min_1", "b_min_2", "b_min_3", "b_min_0", "b_min_1", "b_min_2", "b_min_3", "b_aenig", "b_pseudo"]
-// This is a bool of whether we are adding the b_5 and the b_fav transcriptomes as well
-params.additional_transcriptomes = true
+params.analysis_type = '4'
+switch (params.analysis_type) {
+    case '4':
+        params.raw_reads_dir = "/home/humebc/projects/parky/strain_dnds/raw_reads/4";
+        params.sonic_paranoid_transcriptome_dir = "/home/humebc/projects/parky/strain_dnds/nf_sonicparanoid/4";
+        params.additional_transcriptomes = false;
+        params.nf_local_alignments_dir = "/home/humebc/projects/parky/strain_dnds/nf_local_alignments/4";
+        params.nf_master_fasta_and_q_file = "/home/humebc/projects/parky/strain_dnds/nf_master_fasta_and_q_file/4";
+        params.nf_prot_out = "/home/humebc/projects/parky/strain_dnds/nf_prot_out/4";
+        params.nf_master_tree = "/home/humebc/projects/parky/strain_dnds/nf_master_tree/4";
+        params.nf_codeml_out = "/home/humebc/projects/parky/strain_dnds/nf_codeml_out/4";
+        params.nf_dnds_df_summary = "/home/humebc/projects/parky/strain_dnds/nf_dnds_df_summary/4";
+        break;
+    case '4_2':
+        params.raw_reads_dir = "/home/humebc/projects/parky/strain_dnds/raw_reads/4";
+        params.sonic_paranoid_transcriptome_dir = "/home/humebc/projects/parky/strain_dnds/nf_sonicparanoid/4_2";
+        params.additional_transcriptomes = true;
+        params.nf_local_alignments_dir = "/home/humebc/projects/parky/strain_dnds/nf_local_alignments/4_2";
+        params.nf_master_fasta_and_q_file = "/home/humebc/projects/parky/strain_dnds/nf_master_fasta_and_q_file/4_2";
+        params.nf_prot_out = "/home/humebc/projects/parky/strain_dnds/nf_prot_out/4_2";
+        params.nf_master_tree = "/home/humebc/projects/parky/strain_dnds/nf_master_tree/4_2";
+        params.nf_codeml_out = "/home/humebc/projects/parky/strain_dnds/nf_codeml_out/4_2";
+        params.nf_dnds_df_summary = "/home/humebc/projects/parky/strain_dnds/nf_dnds_df_summary/4_2";
+        break;
+    case '10':
+        params.raw_reads_dir = "/home/humebc/projects/parky/strain_dnds/raw_reads/10";
+        params.sonic_paranoid_transcriptome_dir = "/home/humebc/projects/parky/strain_dnds/nf_sonicparanoid/10";
+        params.additional_transcriptomes = false;
+        params.nf_local_alignments_dir = "/home/humebc/projects/parky/strain_dnds/nf_local_alignments/10";
+        params.nf_master_fasta_and_q_file = "/home/humebc/projects/parky/strain_dnds/nf_master_fasta_and_q_file/10";
+        params.nf_prot_out = "/home/humebc/projects/parky/strain_dnds/nf_prot_out/10";
+        params.nf_master_tree = "/home/humebc/projects/parky/strain_dnds/nf_master_tree/10";
+        params.nf_codeml_out = "/home/humebc/projects/parky/strain_dnds/nf_codeml_out/10";
+        params.nf_dnds_df_summary = "/home/humebc/projects/parky/strain_dnds/nf_dnds_df_summary/10";
+        break;
+    case '10_2':
+        params.raw_reads_dir = "/home/humebc/projects/parky/strain_dnds/raw_reads/10";
+        params.sonic_paranoid_transcriptome_dir = "/home/humebc/projects/parky/strain_dnds/nf_sonicparanoid/10_2";
+        params.additional_transcriptomes = true;
+        params.nf_local_alignments_dir = "/home/humebc/projects/parky/strain_dnds/nf_local_alignments/10_2";
+        params.nf_master_fasta_and_q_file = "/home/humebc/projects/parky/strain_dnds/nf_master_fasta_and_q_file/10_2";
+        params.nf_prot_out = "/home/humebc/projects/parky/strain_dnds/nf_prot_out/10_2";
+        params.nf_master_tree = "/home/humebc/projects/parky/strain_dnds/nf_master_tree/10_2";
+        params.nf_codeml_out = "/home/humebc/projects/parky/strain_dnds/nf_codeml_out/10_2";
+        params.nf_dnds_df_summary = "/home/humebc/projects/parky/strain_dnds/nf_dnds_df_summary/10_2";
+        break;
+}
+params.sonic_paranoid_results_dir = "${params.sonic_paranoid_transcriptome_dir}/single_copy_table_output";
 params.bin_dir = "${workflow.launchDir}/bin"
 params.launch_dir = "${workflow.launchDir}"
 params.tru_seq_pe_fasta_path = "${workflow.launchDir}/TruSeq3-PE.fa"
@@ -131,6 +171,7 @@ if (params.from_download){
 // By being specific we ensure that only the files that would ahve realted to the particular instance
 // i.e. to a praticular sample, are read in.
 process trimmomatic{
+    cache 'lenient'
 	tag "${fastq_file_one}"
     conda "envs/nf_general.yaml"
 	storeDir "nf_trimmed"
@@ -153,73 +194,67 @@ process trimmomatic{
 	"""
 }
 
-ch_rcorrect_input.view()
 
-// // Now error correction
-// process rcorrector{
-//     tag "${trimmed_read_one}"
-//     conda "envs/nf_general.yaml"
-//     cpus params.rcorrector_threads
+
+// Now error correction
+process rcorrector{
+    cache 'lenient'
+    tag "${trimmed_read_one}"
+    conda "envs/nf_general.yaml"
+    cpus params.rcorrector_threads
     
-//     storeDir "nf_error_corrected"
+    storeDir "nf_error_corrected"
     
-//     input:
-//     tuple file(trimmed_read_one), file(trimmed_read_two) from ch_rcorrect_input
+    input:
+    tuple file(trimmed_read_one), file(trimmed_read_two) from ch_rcorrect_input
 
-//     output:
-//     tuple file("${trimmed_read_one.getName().replaceAll('.trimmed_1P.fq.gz', '')}*1P.cor.fq.gz"), file("${trimmed_read_one.getName().replaceAll('.trimmed_1P.fq.gz', '')}*2P.cor.fq.gz") into ch_trinity_input
+    output:
+    tuple file("${trimmed_read_one.getName().replaceAll('.trimmed_1P.fq.gz', '')}*1P.cor.fq.gz"), file("${trimmed_read_one.getName().replaceAll('.trimmed_1P.fq.gz', '')}*2P.cor.fq.gz") into ch_trinity_input
 
-//     script:
-//     """
-//     run_rcorrector.pl -1 $trimmed_read_one -2 $trimmed_read_two -od . -t ${task.cpus}
-//     """
-// }
-
-
+    script:
+    """
+    run_rcorrector.pl -1 $trimmed_read_one -2 $trimmed_read_two -od . -t ${task.cpus}
+    """
+}
 
 
-// // Now do the trinity assembly
-// // NB I have changed the code in here subtly without re running it in order to implement the
-// // storeDir directive. I have added a final mv line to the script to rename the ambiguous trinity fasta
-// // file so that the name is specific to the sample SRR base name.
-// // I have also changed the output dir from being a specific folder for each of the samples (due to the 
-// // ambiguity in the previous naming system) to all being held in the nf_trinity_assembly dir.
-// // I will make the changes by hand now to the outputs that are already in this directory.
-// process trinity{
-//     cache 'lenient'
-//     tag "${corrected_read_one}"
-//     conda "envs/nf_general.yaml"
-//     cpus params.trinity_threads
-//     storeDir "nf_trinity_assembly"
 
-//     input:
-//     tuple file(corrected_read_one), file(corrected_read_two) from ch_trinity_input
 
-//     output:
-//     file "${corrected_read_one.getName().replaceAll('.trimmed_1P.cor.fq.gz', '')}*Trinity.fasta" into ch_remove_short_iso_forms_trinity_input
+// Now do the trinity assembly
+// NB I have changed the code in here subtly without re running it in order to implement the
+// storeDir directive. I have added a final mv line to the script to rename the ambiguous trinity fasta
+// file so that the name is specific to the sample SRR base name.
+// I have also changed the output dir from being a specific folder for each of the samples (due to the 
+// ambiguity in the previous naming system) to all being held in the nf_trinity_assembly dir.
+// I will make the changes by hand now to the outputs that are already in this directory.
+process trinity{
+    cache 'lenient'
+    tag "${corrected_read_one}"
+    conda "envs/nf_general.yaml"
+    cpus params.trinity_threads
+    storeDir "nf_trinity_assembly"
+
+    input:
+    tuple file(corrected_read_one), file(corrected_read_two) from ch_trinity_input
+
+    output:
+    file "${corrected_read_one.getName().replaceAll('.trimmed_1P.cor.fq.gz', '')}*Trinity.fasta" into ch_remove_short_iso_forms_trinity_input
     
-//     script:
-//     // NB that the output directory for each trinity assembly must have 'trinity' in it.
-//     """
-//     Trinity --left $corrected_read_one --right $corrected_read_two --seqType fq --max_memory 150G --CPU ${task.cpus} \\
-//     --min_contig_length 250 --output trinity --full_cleanup
-//     mv trinity.Trinity.fasta ${corrected_read_one.getName().replaceAll('.trimmed_1P.cor.fq.gz','')}.trinity.Trinity.fasta
-//     """
-// }
+    script:
+    // NB that the output directory for each trinity assembly must have 'trinity' in it.
+    """
+    Trinity --left $corrected_read_one --right $corrected_read_two --seqType fq --max_memory 150G --CPU ${task.cpus} \\
+    --min_contig_length 250 --output trinity --full_cleanup
+    mv trinity.Trinity.fasta ${corrected_read_one.getName().replaceAll('.trimmed_1P.cor.fq.gz','')}.trinity.Trinity.fasta
+    """
+}
 
-// // We will have to write a process for including the other transcriptomes here.
-// // Basically, we will do a collect on the ch_remove_short_iso_forms_trinity_input channel
-// // And then get merge this with a read in of two file paths
-// // process add_new_trinity_assemblies{
-// //     cache 'lenient'
-// //     tag "add_new_trinity"
-// //     conda "envs/nf_general.yaml"
+// This is where we will need to incorporate the new trinity assemblies.
+// // I have tried to add the two additional transcriptomes by collecting mixing and flattening
 
-// //     input:
-
-// // }
-
-// // // Now remove the short isos from the trinity assembly
+// We will have two different versions of the remove_short_isos process
+// that will dependent on params.additional_transcriptomes = true
+// One will add the additional two transcriptomes into the mix, the other will not.
 // // // NB we were having problems getting the cache of this process to work.
 // // // The problem was that I was using $workflow.launch_dir as the base to the /bin/remove... path
 // // // However, when I looked at the hash logs, the value of this ($workflow.launch_dir) was giving a different hash
@@ -230,238 +265,271 @@ ch_rcorrect_input.view()
 // // // I will look to see now whether the hash logs are looking at this new variable as a string or at
 // // // the state of this directory. If they're looking at the state of the directory then caches may
 // // // fail when we add additional script files to the /bin directory.
-// // This is where we will need to incorporate the new trinity assemblies.
-// // I have tried to add the two additional transcriptomes by collecting mixing and flattening
-// process remove_short_isos{
-//     cache 'lenient'
-//     tag "${trinity_assembly_fasta}"
+if (params.additional_transcriptomes){
+    process remove_short_isos_mix{
+        cache 'lenient'
+        tag "${trinity_assembly_fasta}"
 
-//     conda "envs/nf_python_scripts.yaml"
-//     storeDir "nf_trinity_assembly"
+        conda "envs/nf_python_scripts.yaml"
+        storeDir "nf_trinity_assembly"
 
-//     input:
-//     file trinity_assembly_fasta from ch_remove_short_iso_forms_trinity_input.collect().mix(Channel.fromPath(["/home/humebc/projects/parky/breviolum_transcriptomes/nf_trinity_assembly/BreviolumB5_Sradians.trinity.Trinity.fasta", "/home/humebc/projects/parky/breviolum_transcriptomes/nf_trinity_assembly/Breviolumfaviinorum_Pclivosa.trinity.Trinity.fasta"])).flatten()
+        input:
+        file trinity_assembly_fasta from ch_remove_short_iso_forms_trinity_input.collect().mix(Channel.fromPath(["/home/humebc/projects/parky/strain_dnds/nf_trinity_assembly/BreviolumB5_Sradians.trinity.Trinity.fasta", "/home/humebc/projects/parky/strain_dnds/nf_trinity_assembly/Breviolumfaviinorum_Pclivosa.trinity.Trinity.fasta"])).flatten()
 
-//     output:
-//     file "${trinity_assembly_fasta.getName().replaceAll('.trinity.Trinity.fasta','')}*.long_iso_only.fasta" into ch_orf_prediction_input
+        output:
+        file "${trinity_assembly_fasta.getName().replaceAll('.trinity.Trinity.fasta','')}*.long_iso_only.fasta" into ch_orf_prediction_input
+        
+        script:
+        """
+        python3 ${params.bin_dir}/remove_short_isos.py $trinity_assembly_fasta
+        """
+    }
+}else{
+    process remove_short_isos_no_mix{
+        cache 'lenient'
+        tag "${trinity_assembly_fasta}"
+
+        conda "envs/nf_python_scripts.yaml"
+        storeDir "nf_trinity_assembly"
+
+        input:
+        file trinity_assembly_fasta from ch_remove_short_iso_forms_trinity_input
+
+        output:
+        file "${trinity_assembly_fasta.getName().replaceAll('.trinity.Trinity.fasta','')}*.long_iso_only.fasta" into ch_orf_prediction_input
+        
+        script:
+        """
+        python3 ${params.bin_dir}/remove_short_isos.py $trinity_assembly_fasta
+        """
+    }
+}
+
+
+// Do ORF prediction using transdecoder
+// Concurrently rename the default names output by transdecoder
+// NB 08/03/2020 I am going to modify the flow a little to reduce the redundancy.
+// I seem to be passing around the .cds and .pep file when only the .pep file is required.
+// The .cds is not required until later.
+process orf_prediction{
+    cache 'lenient'
+    tag "${long_iso_trinity}"
+    conda "envs/nf_transdecoder.yaml"
+    storeDir "nf_transdecoder"
     
-//     script:
-//     """
-//     python3 ${params.bin_dir}/remove_short_isos.py $trinity_assembly_fasta
-//     """
-// }
+    input:
+    file long_iso_trinity from ch_orf_prediction_input
 
-
-// // Do ORF prediction using transdecoder
-// // Concurrently rename the default names output by transdecoder
-// // To make the long_iso_orf files unique and related to their transcriptome we will append the srrname
-// // NB 08/03/2020 I am going to modify the flow a little to reduce the redundancy.
-// // I seem to be passing around the .cds and .pep file when only the .pep file is required.
-// // The .cds is not required until later.
-// process orf_prediction{
-//     cache 'lenient'
-//     tag "${srrname}"
-//     conda "envs/nf_transdecoder.yaml"
-//     storeDir "nf_transdecoder"
+    output:
+    file "${long_iso_trinity.getName().replaceAll('.trinity.Trinity.long_iso_only.fasta','')}*.pep" into ch_remove_multi_orfs_input
+    file "${long_iso_trinity.getName().replaceAll('.trinity.Trinity.long_iso_only.fasta','')}*.cds" into ch_write_unaligned_cds_fastas_fas_input
     
-//     input:
-//     file long_iso_trinity from ch_orf_prediction_input
+    script:
+    """
+    TransDecoder.LongOrfs -t $long_iso_trinity -O .
+    mv longest_orfs.cds ${long_iso_trinity.getName().replaceAll('.trinity.Trinity.long_iso_only.fasta','')}_longest_iso_orfs.cds
+    mv longest_orfs.pep ${long_iso_trinity.getName().replaceAll('.trinity.Trinity.long_iso_only.fasta','')}_longest_iso_orfs.pep
+    """
+}
 
-//     output:
-//     file "${long_iso_trinity.getName().replaceAll('.trinity.Trinity.long_iso_only.fasta','')}*.pep" into ch_remove_multi_orfs_input
-//     file "${long_iso_trinity.getName().replaceAll('.trinity.Trinity.long_iso_only.fasta','')}*.cds" into ch_write_unaligned_cds_fastas_fas_input
+
+// The transdecoder output can have multiple ORFs predicted per transcript
+// We will once again only keep one representative per transcript and work with this for the
+// ortholog prediction
+// Sonic Parnoid runs from a single directory containing all of the fastas
+// To enable this we will publish each of the fastas into a single directory
+// We will use a different single directory dependent on which analysis we are running
+// e.g. 4, 4_2, 10, 10_2
+process remove_multi_orfs_from_pep{
+    cache 'lenient'
+    tag "${pep_file}"
+    conda "envs/nf_python_scripts.yaml"
+    storeDir params.sonic_paranoid_transcriptome_dir
+
+    input:
+    file pep_file from ch_remove_multi_orfs_input
+
+    output:
+    //tuple file("*.single_orf.pep"), file(cds_file) into ch_sonic_paranoid_input
+    file("${pep_file.getName().replaceAll('_longest_iso_orfs.pep','')}*.single_orf.pep") into ch_sonicparanoid_input
     
-//     script:
-//     """
-//     TransDecoder.LongOrfs -t $long_iso_trinity -O .
-//     mv longest_orfs.cds ${long_iso_trinity.getName().replaceAll('.trinity.Trinity.long_iso_only.fasta','')}_longest_iso_orfs.cds
-//     mv longest_orfs.pep ${long_iso_trinity.getName().replaceAll('.trinity.Trinity.long_iso_only.fasta','')}_longest_iso_orfs.pep
-//     """
-// }
-
-
-// // The transdecoder output can have multiple ORFs predicted per transcript
-// // We will once again only keep one representative per transcript and work with this for the
-// // ortholog prediction
-// // Sonic Parnoid runs from a single directory containing all of the fastas
-// // To enable this we will publish each of the fastas into a single directory
-// process remove_multi_orfs_from_pep{
-//     cache 'lenient'
-//     tag "${pep_file}"
-//     conda "envs/nf_python_scripts.yaml"
-//     storeDir "nf_sonicparanoid"
-
-//     input:
-//     file pep_file from ch_remove_multi_orfs_input
-
-//     output:
-//     //tuple file("*.single_orf.pep"), file(cds_file) into ch_sonic_paranoid_input
-//     file("${pep_file.getName().replaceAll('_longest_iso_orfs.pep','')}*.single_orf.pep") into ch_sonicparanoid_input
+    script:
+    output_path = pep_file.getName().replaceAll("longest_iso_orfs.pep", "longest_iso_orfs.single_orf.pep")
     
-//     script:
-//     output_path = pep_file.getName().replaceAll("longest_iso_orfs.pep", "longest_iso_orfs.single_orf.pep")
+    "python3 ${params.bin_dir}/unique_orfs_from_pep.py $pep_file"
+}
+
+
+process sonicparanoid{
+    cache 'lenient'
+    tag "sonicparanoid"
+    cpus params.sonicparanoid_threads
+    // NB, the sonic paranoid does not support a conda installation
+    // Rather, we installed through brew on our system.
+    // conda "envs/nf_sonicparanoid.yaml"
+    // I installed it using their python virutal environment instructions
+    // I ththen put the penv bin path at the end of PATH
+    // So far it seems to work even with the penv NOT activated
+    storeDir params.sonic_paranoid_results_dir
     
-//     "python3 ${params.bin_dir}/unique_orfs_from_pep.py $pep_file"
-// }
+    input:
+    // We won't actually use this input. It is just here to link
+    // The processes
+    file pep_file from ch_sonicparanoid_input.collect()
+
+    output:
+    file "single-copy_groups.tsv" into ch_screen_sonicparanoid_output_input
+
+    script:
+    """
+    sonicparanoid -i ${params.sonic_paranoid_transcriptome_dir} -o . -t ${task.cpus}
+    find . -name single-copy_groups.tsv | xargs -I {} mv {} .
+    """
+}
 
 
-// process sonicparanoid{
-//     cache 'lenient'
-//     tag "sonicparanoid"
-//     cpus params.sonicparanoid_threads
-//     conda "envs/nf_sonicparanoid.yaml"
-//     storeDir "nf_sonicparanoid/output_12"
+// The sonic paranoid output table contains orthologs that were not found in all of the transciptomes
+// We will drop these orthologs and write out the .tsv again
+process screen_sonicparnoid_output{
+    cache 'lenient'
+    tag "screen sonicparanoid"
+    conda "envs/nf_python_scripts.yaml"
+    storeDir params.sonic_paranoid_results_dir
+
+    input:
+    file single_copy_tsv from ch_screen_sonicparanoid_output_input
+
+    output:
+    file "screened_orthologs.tsv" into ch_write_unaligned_cds_fastas_tab_input
+
+    script:
+    """
+    python3 ${params.bin_dir}/screen_orthologs.py $single_copy_tsv
+    """
+}
+
+
+// Work through the screened_orthologs and for each ortholog make a directory
+// and write out a fasta that contains the sequence for each of the strains
+// Input to the script will be the .tsv. Each of the .cds fastas will be
+// in the nextflow working directory due to the channel input
+// The column titles of the screened ortholog .tsv are the .pep file
+// names (e.g. SRR1793320_longest_iso_orfs.single_orf.pep)
+// The cds files that we will be getting the sequences from are all prefixed
+// with the SRRXXX (e.g. SRR1793320_longest_iso_orfs.cds). As such we can use
+// this SRRXXX in the python script to map between the table and the .cds files
+process write_unaligned_cds_fastas{
+    tag "write_unaligned_cds_fastas"
+    conda "envs/nf_python_scripts.yaml"
+    storeDir params.nf_local_alignments_dir
     
-//     input:
-//     // We won't actually use this input. It is just here to link
-//     // The processes
-//     file pep_file from ch_sonicparanoid_input.collect()
+    input:
+    file screened_orth_table from ch_write_unaligned_cds_fastas_tab_input
+    file cds_fastas from ch_write_unaligned_cds_fastas_fas_input.collect()
 
-//     output:
-//     file "single-copy_groups.tsv" into ch_screen_sonicparanoid_output_input
+    output:
+    file "*_unaligned_cds.fasta" into ch_align_using_guidance_input
 
-//     script:
-//     """
-//     sonicparanoid -i ${params.launch_dir}/nf_sonicparanoid -o . -t ${task.cpus}
-//     find . -name single-copy_groups.tsv | xargs -I {} mv {} .
-//     """
-// }
+    script:
+    """
+    python3 ${params.bin_dir}/write_out_unaligned_cds_fastas.py $screened_orth_table
+    """
+}
 
+// Align each of the unaligned cds files.
+// We will do this in two processes.
+// First we will perform the guidance analysis
+// Then we will use the three output files to create the aligned fastas
+// That have been cropped and had the appropriate low quality columns dropped
+// As always, Guidance is proving tricky to get to run
+// We have had to explicityly add per-bioperl to the env yaml
+// Then, the bash wrapper for the perl execution of the guidance.pl
+// is not working so you have to explicityly run perl and the full path to guidance.pl
+// Because we can't know what the full path is, we will write a quick python script
+// to find this out and run it.
+// Guidance seems to be quite unstable. It seems to produce errors for no reason.
+// However, the pipeline can simply be restarted and everything seems to behave OK.
+// As such I have now implemented an automatic retry process where the python
+// script will attempt to re-run the guidance analysis in question before quitting.
 
-// // The sonic paranoid output table contains orthologs that were not found in all of the transciptomes
-// // We will drop these orthologs and write out the .tsv again
-// process screen_sonicparnoid_output{
-//     tag "screen sonicparanoid"
-//     conda "envs/nf_python_scripts.yaml"
-//     storeDir "nf_sonicparanoid/output_12"
+process align_using_guidance{
+    tag "${unaligned_fasta.toString().split('_')[0]}"
+    conda "envs/nf_guidance.yaml"
+    storeDir params.nf_local_alignments_dir
 
-//     input:
-//     file single_copy_tsv from ch_screen_sonicparanoid_output_input
+    input:
+    file unaligned_fasta from ch_align_using_guidance_input.flatten()
 
-//     output:
-//     file "screened_orthologs.tsv" into ch_write_unaligned_cds_fastas_tab_input
+    output:
+    tuple file("${unaligned_fasta.toString().split('_')[0]}.MAFFT.Guidance2_res_pair_res.PROT.scr"), file("${unaligned_fasta.toString().split('_')[0]}.MAFFT.PROT.aln"), file("${unaligned_fasta.toString().split('_')[0]}.MAFFT.aln.With_Names") into ch_process_guidance_output_input
 
-//     script:
-//     """
-//     python3 ${params.bin_dir}/screen_orthologs.py $single_copy_tsv
-//     """
-// }
+    script:
+    orth_group_id = unaligned_fasta.toString().split('_')[0]
+    """
+    python3 ${params.bin_dir}/run_guidance.py $unaligned_fasta
+    """
+}
 
+// This process will use the three ouput files from align_using_guidance
+// to write out cropped and aligned aa and cds files.
+process process_guidance_output{
+    cache 'lenient'
+    tag "${aa_cols_score_file_path.toString().split("/")[-1].split(/\./)[0]}"
+    conda "envs/nf_python_scripts.yaml"
+    storeDir params.nf_local_alignments_dir
 
-// // Work through the screened_orthologs and for each ortholog make a directory
-// // and write out a fasta that contains the sequence for each of the strains
-// // Input to the script will be the .tsv. Each of the .cds fastas will be
-// // in the nextflow working directory due to the channel input
-// // The column titles of the screened ortholog .tsv are the .pep file
-// // names (e.g. SRR1793320_longest_iso_orfs.single_orf.pep)
-// // The cds files that we will be getting the sequences from are all prefixed
-// // with the SRRXXX (e.g. SRR1793320_longest_iso_orfs.cds). As such we can use
-// // this SRRXXX in the python script to map between the table and the .cds files
-// process write_unaligned_cds_fastas{
-//     tag "write_unaligned_cds_fastas"
-//     conda "envs/nf_python_scripts.yaml"
-//     storeDir "nf_local_alignments"
-    
-//     input:
-//     file screened_orth_table from ch_write_unaligned_cds_fastas_tab_input
-//     file cds_fastas from ch_write_unaligned_cds_fastas_fas_input.collect()
+    input:
+    tuple file(aa_cols_score_file_path), file(aa_alignment_file_path), file(cds_alignment_file_path) from ch_process_guidance_output_input
 
-//     output:
-//     file "*_unaligned_cds.fasta" into ch_align_using_guidance_input
+    output:
+    file "${aa_cols_score_file_path.toString().split("/")[-1].split(/\./)[0]}*_cropped_aligned_aa.fasta" into ch_model_test_input
+    file "${aa_cols_score_file_path.toString().split("/")[-1].split(/\./)[0]}*_cropped_aligned_cds.fasta" into ch_run_codeml_align_input
 
-//     script:
-//     """
-//     python3 ${params.bin_dir}/write_out_unaligned_cds_fastas.py $screened_orth_table
-//     """
-// }
-
-// // Align each of the unaligned cds files.
-// // We will do this in two processes.
-// // First we will perform the guidance analysis
-// // Then we will use the three output files to create the aligned fastas
-// // That have been cropped and had the appropriate low quality columns dropped
-// // As always, Guidance is proving tricky to get to run
-// // We have had to explicityly add per-bioperl to the env yaml
-// // Then, the bash wrapper for the perl execution of the guidance.pl
-// // is not working so you have to explicityly run perl and the full path to guidance.pl
-// // Because we can't know what the full path is, we will write a quick python script
-// // to find this out and run it.
-// // Guidance seems to be quite unstable. It seems to produce errors for no reason.
-// // However, the pipeline can simply be restarted and everything seems to behave OK.
-// // As such I have now implemented an automatic retry process where the python
-// // script will attempt to re-run the guidance analysis in question before quitting.
-// process align_using_guidance{
-//     tag "${unaligned_fasta.toString().split('_')[0]}"
-//     conda "envs/nf_guidance.yaml"
-//     storeDir "nf_local_alignments"
-//     input:
-//     file unaligned_fasta from ch_align_using_guidance_input.flatten()
-
-//     output:
-//     tuple file("${unaligned_fasta.toString().split('_')[0]}*.MAFFT.Guidance2_res_pair_res.PROT.scr"), file("${unaligned_fasta.toString().split('_')[0]}*.MAFFT.PROT.aln"), file("${unaligned_fasta.toString().split('_')[0]}*.MAFFT.aln.With_Names") into ch_process_guidance_output_input
-
-//     script:
-//     orth_group_id = unaligned_fasta.toString().split('_')[0]
-//     """
-//     python3 ${params.bin_dir}/run_guidance.py $unaligned_fasta
-//     """
-// }
-
-// // This process will use the three ouput files from align_using_guidance
-// process process_guidance_output{
-//     tag "${aa_cols_score_file_path.toString().split("/")[-1].split(/\./)[0]}"
-//     storeDir "nf_local_alignments"
-
-//     input:
-//     tuple file(aa_cols_score_file_path), file(aa_alignment_file_path), file(cds_alignment_file_path) from ch_process_guidance_output_input
-
-//     output:
-//     file "${aa_cols_score_file_path.toString().split("/")[-1].split(/\./)[0]}*_cropped_aligned_aa.fasta" into ch_model_test_input
-//     file "${aa_cols_score_file_path.toString().split("/")[-1].split(/\./)[0]}*_cropped_aligned_cds.fasta" into ch_run_codeml_align_input
-
-//     script:
-//     """
-//     python3 ${params.bin_dir}/process_guidance_output.py $aa_cols_score_file_path $aa_alignment_file_path $cds_alignment_file_path
-//     """
-// }
+    script:
+    """
+    python3 ${params.bin_dir}/process_guidance_output.py $aa_cols_score_file_path $aa_alignment_file_path $cds_alignment_file_path
+    """
+}
 
 
-// // Now find the best protein evo model
-// // In some cases the fasta files that resulted from the process_guidance_output may be empty
-// // As such we will wrap the modeltest-ng running in a python script that will check for this.
-// // If there is this problem with the aligned fasta then we will return code 0
-// // before making sure to delete any *.out file that might have been made
-// // We will make it so that the *_prottest_result.out is output empty.
-// // We can then check for the empty .out file in the make_master_alignment
-// process model_test{
-//     tag "${cropped_aligned_aa_fasta.toString().split('_')[0]}"
-//     conda "envs/nf_modeltest-ng.yaml"
-//     storeDir "nf_prot_out"
+// Now find the best protein evo model
+// In some cases the fasta files that resulted from the process_guidance_output may be empty
+// As such we will wrap the modeltest-ng running in a python script that will check for this.
+// If there is this problem with the aligned fasta then we will return code 0
+// before making sure to delete any *.out file that might have been made
+// We will make it so that the *_prottest_result.out is output empty.
+// We can then check for the empty .out file in the make_master_alignment
+process model_test{
+    tag "${cropped_aligned_aa_fasta.toString().split('_')[0]}"
+    cache 'lenient'
+    conda "envs/nf_modeltest-ng.yaml"
+    storeDir params.nf_prot_out
 
-//     input:
-//     file cropped_aligned_aa_fasta from ch_model_test_input
+    input:
+    file cropped_aligned_aa_fasta from ch_model_test_input
 
-//     output:
-//     tuple file("${cropped_aligned_aa_fasta.toString().split('_')[0]}*_prottest_result.out"), file(cropped_aligned_aa_fasta) into ch_make_master_alignment_input
+    output:
+    tuple file("${cropped_aligned_aa_fasta.toString().split('_')[0]}_prottest_result.out"), file(cropped_aligned_aa_fasta) into ch_make_master_alignment_input
 
-//     script:
-//     """
-//     python3 ${params.bin_dir}/run_model_test.py $cropped_aligned_aa_fasta
-//     """
-// }
+    script:
+    """
+    python3 ${params.bin_dir}/run_model_test.py $cropped_aligned_aa_fasta
+    """
+}
 
 // // // ch_make_master_alignment_input.collect().subscribe {  println "Got: $it"  }
 
-// // To make the master tree we will work witha single process that
+// // To make the master tree we will work with a single process that
 // // will need to iterthrough each of the protein model outputs.
 // // It will also need access to the aa cropped and alignment files
 // // We will supply both of these in two seperate input channels
 // // The output will be a master fasta and a q file for raxml that delimits the partitions
 // // that can then be fed into the treemaking
 // process make_master_alignment_and_q_file{
+//     cache 'lenient'
 //     tag "make_master_alignment"
 //     conda "envs/nf_python_scripts.yaml"
-//     storeDir "nf_master_fasta_and_q_file"
+//     storeDir params.nf_master_fasta_and_q_file
 
 //     input:
 //     file out_and_aligned_fasta_files from ch_make_master_alignment_input.collect()
@@ -471,7 +539,7 @@ ch_rcorrect_input.view()
 
 //     script:
 //     """
-//     python3 ${params.bin_dir}/make_master_alignment.py ${params.launch_dir}/nf_prot_out
+//     python3 ${params.bin_dir}/make_master_alignment.py ${params.nf_prot_out}
 //     """
 // }
 
@@ -480,7 +548,7 @@ ch_rcorrect_input.view()
 //     tag "make_tree"
 //     cpus params.raxml_threads
 //     conda "envs/nf_raxml.yaml"
-//     storeDir "nf_master_tree"
+//     storeDir params.nf_master_tree
 
 //     input:
 //     tuple file(master_fasta), file(q_partition_file) from ch_make_tree_input
@@ -501,7 +569,7 @@ ch_rcorrect_input.view()
 // process annotate_tree{
 //     tag "annotate_tree"
 //     conda "envs/nf_python_scripts.yaml"
-//     storeDir "nf_master_tree"
+//     storeDir params.nf_master_tree
 
 //     input:
 //     tuple file(tree_one), file(tree_two), file(tree_three) from ch_annotate_tree_input
@@ -529,7 +597,7 @@ ch_rcorrect_input.view()
 // process run_codeml{
 //     tag "$cds_file"
 //     conda "envs/nf_codeml.yaml"
-//     storeDir "nf_codeml_out"
+//     storeDir params.nf_codeml_out
 //     input:
 //     tuple file(cds_file), file(tree) from ch_run_codeml_align_input.combine(ch_run_codeml_tree_input)
     

@@ -22,6 +22,7 @@ class ProcessGuidanceOutput:
     def __init__(self):
         self.seq_names = None
         self.orth_group_id = ntpath.basename(sys.argv[1]).split('.')[0]
+        print(f'orth_group_id is {self.orth_group_id}')
         self.aa_cols_score_file_path = sys.argv[1]
         self.aa_alignment_file_path = sys.argv[2]
         # This aa_alignment has the original names in it. 

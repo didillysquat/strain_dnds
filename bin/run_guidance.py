@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import subprocess
 import sys
+import os
 
 class RunGuidance:
     def __init__(self):
@@ -30,5 +31,24 @@ class RunGuidance:
             else:
                 raise RuntimeError(f'Despite trying to rerun the Guidance analysis 5 times, there seems to be something wrong with {self.input_fasta}')
 
-rg = RunGuidance()
-rg.run_guidance()
+def check_for_output_files(self):
+    if os.path.exists(os.path.join('.', f'{self.orth_group_id}.MAFFT.Guidance2_res_pair_res.PROT.scr')):
+        if os.path.exists(os.path.join('.', f'{self.orth_group_id}.MAFFT.PROT.aln')):
+            if os.path.exists(os.path.join('.', f'{self.orth_group_id}.MAFFT.aln.With_Names')):
+                return True
+    return False
+
+# I'm getting really annoyed by the random errors taht seem to happen in Guidance but don't throw the runtime error
+# generally the cause of the error is that one of the expected output files is missing.
+# So, we will check to see if they are all there. If they are not, then we will rerun this a few times
+count = 0
+while True:
+    print('first attempt')
+    rg = RunGuidance()
+    rg.run_guidance()
+    
+    if rg.check_for_output_files():
+        break
+    else:
+        count += 1
+        print(f'attempt {count}')
