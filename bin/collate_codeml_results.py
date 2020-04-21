@@ -61,7 +61,7 @@ class MakeCodemlSumDF:
                         ds = float(data_match[0][2])
 
                     names_match = self.names_reg_ex.findall(out_file[i-4])
-                    ortholog_id = int(names_match[0][0])
+                    ortholog_id = int(names_match[0][0])  
                     spp_one = names_match[0][1]
                     spp_two = names_match[0][2]
 
@@ -89,7 +89,7 @@ class MakeCodemlSumDF:
                         # here we now need to move on to the next codeml_out_file
                         self.count = 0
                         break
-
+            
         self.df.to_csv("codeml_results_df.csv")
 
 mcsdf = MakeCodemlSumDF()

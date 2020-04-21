@@ -4,7 +4,7 @@
 // I have created directories that hold symlinks to either the 4 seq set or to the 10 seq set.
 // Use these directories to work with either the 4 or 10 samples set.
 // For the 4 or 4 + 2 analysis:
-params.analysis_type = '4'
+params.analysis_type = '10'
 switch (params.analysis_type) {
     case '4':
         params.raw_reads_dir = "/home/humebc/projects/parky/strain_dnds/raw_reads/4";
@@ -16,6 +16,7 @@ switch (params.analysis_type) {
         params.nf_master_tree = "/home/humebc/projects/parky/strain_dnds/nf_master_tree/4";
         params.nf_codeml_out = "/home/humebc/projects/parky/strain_dnds/nf_codeml_out/4";
         params.nf_dnds_df_summary = "/home/humebc/projects/parky/strain_dnds/nf_dnds_df_summary/4";
+        params.sra_list_as_csv = "SRR_b_min_c,SRR_b_psyg_c,SRR1795737,SRR1795735"
         break;
     case '4_2':
         params.raw_reads_dir = "/home/humebc/projects/parky/strain_dnds/raw_reads/4";
@@ -27,6 +28,7 @@ switch (params.analysis_type) {
         params.nf_master_tree = "/home/humebc/projects/parky/strain_dnds/nf_master_tree/4_2";
         params.nf_codeml_out = "/home/humebc/projects/parky/strain_dnds/nf_codeml_out/4_2";
         params.nf_dnds_df_summary = "/home/humebc/projects/parky/strain_dnds/nf_dnds_df_summary/4_2";
+        params.sra_list_as_csv = "Breviolumfaviinorum_Pclivosa,BreviolumB5_Sradians,SRR_b_min_c,SRR_b_psyg_c,SRR1795737,SRR1795735"
         break;
     case '10':
         params.raw_reads_dir = "/home/humebc/projects/parky/strain_dnds/raw_reads/10";
@@ -38,6 +40,7 @@ switch (params.analysis_type) {
         params.nf_master_tree = "/home/humebc/projects/parky/strain_dnds/nf_master_tree/10";
         params.nf_codeml_out = "/home/humebc/projects/parky/strain_dnds/nf_codeml_out/10";
         params.nf_dnds_df_summary = "/home/humebc/projects/parky/strain_dnds/nf_dnds_df_summary/10";
+        params.sra_list_as_csv = "SRR1793320,SRR1793321,SRR1793322,SRR1793323,SRR1793324,SRR1793325,SRR1793326,SRR1793327,SRR1795737,SRR1795735"
         break;
     case '10_2':
         params.raw_reads_dir = "/home/humebc/projects/parky/strain_dnds/raw_reads/10";
@@ -49,6 +52,7 @@ switch (params.analysis_type) {
         params.nf_master_tree = "/home/humebc/projects/parky/strain_dnds/nf_master_tree/10_2";
         params.nf_codeml_out = "/home/humebc/projects/parky/strain_dnds/nf_codeml_out/10_2";
         params.nf_dnds_df_summary = "/home/humebc/projects/parky/strain_dnds/nf_dnds_df_summary/10_2";
+        params.sra_list_as_csv = "Breviolumfaviinorum_Pclivosa,BreviolumB5_Sradians,SRR1793320,SRR1793321,SRR1793322,SRR1793323,SRR1793324,SRR1793325,SRR1793326,SRR1793327,SRR1795737,SRR1795735"
         break;
 }
 params.sonic_paranoid_results_dir = "${params.sonic_paranoid_transcriptome_dir}/single_copy_table_output";
@@ -255,17 +259,17 @@ process trinity{
 // We will have two different versions of the remove_short_isos process
 // that will dependent on params.additional_transcriptomes = true
 // One will add the additional two transcriptomes into the mix, the other will not.
-// // // NB we were having problems getting the cache of this process to work.
-// // // The problem was that I was using $workflow.launch_dir as the base to the /bin/remove... path
-// // // However, when I looked at the hash logs, the value of this ($workflow.launch_dir) was giving a different hash
-// // // hash each time. I think this was because what was getting hashed was the state of this directory.
-// // // Obviously the state was changing very often.
-// // // To get the hash to work in the end I have replaced the $workflow.launch_dir with a params.bin_dir
-// // // variable that I have set at the beginning of this file using the $workflow.launch_dir variable.
-// // // I will look to see now whether the hash logs are looking at this new variable as a string or at
-// // // the state of this directory. If they're looking at the state of the directory then caches may
-// // // fail when we add additional script files to the /bin directory.
-if (params.additional_transcriptomes){
+// // NB we were having problems getting the cache of this process to work.
+// // The problem was that I was using $workflow.launch_dir as the base to the /bin/remove... path
+// // However, when I looked at the hash logs, the value of this ($workflow.launch_dir) was giving a different hash
+// // hash each time. I think this was because what was getting hashed was the state of this directory.
+// // Obviously the state was changing very often.
+// // To get the hash to work in the end I have replaced the $workflow.launch_dir with a params.bin_dir
+// // variable that I have set at the beginning of this file using the $workflow.launch_dir variable.
+// // I will look to see now whether the hash logs are looking at this new variable as a string or at
+// // the state of this directory. If they're looking at the state of the directory then caches may
+// // fail when we add additional script files to the /bin directory.
+if (params.additional_transcriptomes==true){
     process remove_short_isos_mix{
         cache 'lenient'
         tag "${trinity_assembly_fasta}"
@@ -277,7 +281,7 @@ if (params.additional_transcriptomes){
         file trinity_assembly_fasta from ch_remove_short_iso_forms_trinity_input.collect().mix(Channel.fromPath(["/home/humebc/projects/parky/strain_dnds/nf_trinity_assembly/BreviolumB5_Sradians.trinity.Trinity.fasta", "/home/humebc/projects/parky/strain_dnds/nf_trinity_assembly/Breviolumfaviinorum_Pclivosa.trinity.Trinity.fasta"])).flatten()
 
         output:
-        file "${trinity_assembly_fasta.getName().replaceAll('.trinity.Trinity.fasta','')}*.long_iso_only.fasta" into ch_orf_prediction_input
+        file "${trinity_assembly_fasta.getName().replaceAll('.fasta','')}.long_iso_only.fasta" into ch_orf_prediction_input
         
         script:
         """
@@ -296,7 +300,7 @@ if (params.additional_transcriptomes){
         file trinity_assembly_fasta from ch_remove_short_iso_forms_trinity_input
 
         output:
-        file "${trinity_assembly_fasta.getName().replaceAll('.trinity.Trinity.fasta','')}*.long_iso_only.fasta" into ch_orf_prediction_input
+        file "${trinity_assembly_fasta.getName().replaceAll('.fasta','')}.long_iso_only.fasta" into ch_orf_prediction_input
         
         script:
         """
@@ -306,6 +310,8 @@ if (params.additional_transcriptomes){
 }
 
 
+
+// ch_orf_prediction_input.view()
 // Do ORF prediction using transdecoder
 // Concurrently rename the default names output by transdecoder
 // NB 08/03/2020 I am going to modify the flow a little to reduce the redundancy.
@@ -321,8 +327,8 @@ process orf_prediction{
     file long_iso_trinity from ch_orf_prediction_input
 
     output:
-    file "${long_iso_trinity.getName().replaceAll('.trinity.Trinity.long_iso_only.fasta','')}*.pep" into ch_remove_multi_orfs_input
-    file "${long_iso_trinity.getName().replaceAll('.trinity.Trinity.long_iso_only.fasta','')}*.cds" into ch_write_unaligned_cds_fastas_fas_input
+    file "${long_iso_trinity.getName().replaceAll('.trinity.Trinity.long_iso_only.fasta','')}_longest_iso_orfs.pep" into ch_remove_multi_orfs_input
+    file "${long_iso_trinity.getName().replaceAll('.trinity.Trinity.long_iso_only.fasta','')}_longest_iso_orfs.cds" into ch_write_unaligned_cds_fastas_fas_input
     
     script:
     """
@@ -350,8 +356,7 @@ process remove_multi_orfs_from_pep{
     file pep_file from ch_remove_multi_orfs_input
 
     output:
-    //tuple file("*.single_orf.pep"), file(cds_file) into ch_sonic_paranoid_input
-    file("${pep_file.getName().replaceAll('_longest_iso_orfs.pep','')}*.single_orf.pep") into ch_sonicparanoid_input
+    file("${pep_file.getName().replaceAll('_longest_iso_orfs.pep','')}_longest_iso_orfs.single_orf.pep") into ch_sonicparanoid_input
     
     script:
     output_path = pep_file.getName().replaceAll("longest_iso_orfs.pep", "longest_iso_orfs.single_orf.pep")
@@ -421,7 +426,8 @@ process screen_sonicparnoid_output{
 process write_unaligned_cds_fastas{
     tag "write_unaligned_cds_fastas"
     conda "envs/nf_python_scripts.yaml"
-    storeDir params.nf_local_alignments_dir
+    // storeDir params.nf_local_alignments_dir
+    publishDir params.nf_local_alignments_dir
     
     input:
     file screened_orth_table from ch_write_unaligned_cds_fastas_tab_input
@@ -482,8 +488,8 @@ process process_guidance_output{
     tuple file(aa_cols_score_file_path), file(aa_alignment_file_path), file(cds_alignment_file_path) from ch_process_guidance_output_input
 
     output:
-    file "${aa_cols_score_file_path.toString().split("/")[-1].split(/\./)[0]}*_cropped_aligned_aa.fasta" into ch_model_test_input
-    file "${aa_cols_score_file_path.toString().split("/")[-1].split(/\./)[0]}*_cropped_aligned_cds.fasta" into ch_run_codeml_align_input
+    file "${aa_cols_score_file_path.toString().split("/")[-1].split(/\./)[0]}_cropped_aligned_aa.fasta" into ch_model_test_input
+    file "${aa_cols_score_file_path.toString().split("/")[-1].split(/\./)[0]}_cropped_aligned_cds.fasta" into ch_run_codeml_align_input
 
     script:
     """
@@ -517,111 +523,119 @@ process model_test{
     """
 }
 
-// // // ch_make_master_alignment_input.collect().subscribe {  println "Got: $it"  }
+// ch_make_master_alignment_input.collect().view()
 
-// // To make the master tree we will work with a single process that
-// // will need to iterthrough each of the protein model outputs.
-// // It will also need access to the aa cropped and alignment files
-// // We will supply both of these in two seperate input channels
-// // The output will be a master fasta and a q file for raxml that delimits the partitions
-// // that can then be fed into the treemaking
-// process make_master_alignment_and_q_file{
-//     cache 'lenient'
-//     tag "make_master_alignment"
-//     conda "envs/nf_python_scripts.yaml"
-//     storeDir params.nf_master_fasta_and_q_file
 
-//     input:
-//     file out_and_aligned_fasta_files from ch_make_master_alignment_input.collect()
+// To make the master tree we will work with a single process that
+// will need to iterthrough each of the protein model outputs.
+// It will also need access to the aa cropped and alignment files
+// We will supply both of these in two seperate input channels
+// The output will be a master fasta and a q file for raxml that delimits the partitions
+// that can then be fed into the treemaking
+//NB!!!! This is causing some really weird errors that we weren't able to fix
+// where for some reason the .command.out and .command.err files were missing
+// When I ran the work directory .command.run script it ran perfectly.
+// So in the end we just manually moved the output into the store dir
+// and then continued running. This weirdness does NOT happen
+// with the "_2" samples. So, good luck figuring out what's happening.
+// I've given up.
+process make_master_alignment_and_q_file{
+    cache 'lenient'
+    tag "make_master_alignment"
+    conda "envs/nf_python_scripts.yaml"
+    storeDir params.nf_master_fasta_and_q_file
 
-//     output:
-//     tuple file("master_fasta_for_tree.fasta"), file("q_partition_file.q") into ch_make_tree_input
+    input:
+    file out_and_aligned_fasta_files from ch_make_master_alignment_input.collect()
 
-//     script:
-//     """
-//     python3 ${params.bin_dir}/make_master_alignment.py ${params.nf_prot_out}
-//     """
-// }
+    output:
+    tuple file("master_fasta_for_tree.fasta"), file("q_partition_file.q") into ch_make_tree_input
 
-// // Make a ML tree using raxml
-// process make_tree{
-//     tag "make_tree"
-//     cpus params.raxml_threads
-//     conda "envs/nf_raxml.yaml"
-//     storeDir params.nf_master_tree
+    script:
+    """
+    python3 ${params.bin_dir}/make_master_alignment.py ${params.nf_prot_out}
+    """
+}
 
-//     input:
-//     tuple file(master_fasta), file(q_partition_file) from ch_make_tree_input
+// Make a ML tree using raxml
+process make_tree{
+    tag "make_tree"
+    cpus params.raxml_threads
+    conda "envs/nf_raxml.yaml"
+    storeDir params.nf_master_tree
 
-//     output:
-//     tuple file("RAxML_bestTree.strain_dn_ds"), file("RAxML_bipartitionsBranchLabels.strain_dn_ds"), file("RAxML_bipartitions.strain_dn_ds") into ch_annotate_tree_input
-//     file "RAxML_bestTree.strain_dn_ds" into ch_run_codeml_tree_input
-//     script:
-//     """
-//     raxmlHPC-PTHREADS-AVX2 -s $master_fasta -q $q_partition_file -x 183746 -f a, -p \\
-//     83746273 -# 1000 -T ${task.cpus} -n strain_dn_ds -m PROTGAMMAWAG
-//     """
-// }
+    input:
+    tuple file(master_fasta), file(q_partition_file) from ch_make_tree_input
 
-// // Apply more human readable labels to the tree
-// // Currently the labels are the SRRXXX this will
-// //add the strain and species to the labels
-// process annotate_tree{
-//     tag "annotate_tree"
-//     conda "envs/nf_python_scripts.yaml"
-//     storeDir params.nf_master_tree
+    output:
+    tuple file("RAxML_bestTree.strain_dn_ds"), file("RAxML_bipartitionsBranchLabels.strain_dn_ds"), file("RAxML_bipartitions.strain_dn_ds") into ch_annotate_tree_input
+    file "RAxML_bestTree.strain_dn_ds" into ch_run_codeml_tree_input
+    script:
+    """
+    raxmlHPC-PTHREADS-AVX2 -s $master_fasta -q $q_partition_file -x 183746 -f a, -p \\
+    83746273 -# 1000 -T ${task.cpus} -n strain_dn_ds -m PROTGAMMAWAG
+    """
+}
 
-//     input:
-//     tuple file(tree_one), file(tree_two), file(tree_three) from ch_annotate_tree_input
+// Apply more human readable labels to the tree
+// Currently the labels are the SRRXXX this will
+//add the strain and species to the labels
+process annotate_tree{
+    tag "annotate_tree"
+    conda "envs/nf_python_scripts.yaml"
+    storeDir params.nf_master_tree
 
-//     output:
-//     tuple file("RAxML_bestTree.strain_dn_ds_named"), file("RAxML_bipartitionsBranchLabels.strain_dn_ds_named"), file("RAxML_bipartitions.strain_dn_ds_named") into ch_tree_for_dnds_output
+    input:
+    tuple file(tree_one), file(tree_two), file(tree_three) from ch_annotate_tree_input
 
-//     script:
-//     """
-//     python3 ${params.bin_dir}/annotate_tree.py $tree_one $tree_two $tree_three
-//     """
-// }
+    output:
+    tuple file("RAxML_bestTree.strain_dn_ds_named"), file("RAxML_bipartitionsBranchLabels.strain_dn_ds_named"), file("RAxML_bipartitions.strain_dn_ds_named") into ch_tree_for_dnds_output
 
-// // Here we create codeml control files.
-// // Previously we were going to a lot of effort to incorporate
-// // some sort of parallelisation. However, let's see if we can make use of nextflow
-// // format here and run one instance per cds input.
-// // When we run this we will check to see that there are sequences in the alignment and 
-// // that the alignment is divisible by 3. If either of these assertions fails
-// // we will exit without error. This means that the *.out file output needs to be optional
-// // Having an optional *.out file causes issues for storeDir as it causes all process to skip
-// // rather than look for a .out file. To work around this we have written in the output
-// // of a file called status.txt that will hold a '0' or a '1' depending on whether the
-// // process caused an error or not. This way the process will be forced to run
-// process run_codeml{
-//     tag "$cds_file"
-//     conda "envs/nf_codeml.yaml"
-//     storeDir params.nf_codeml_out
-//     input:
-//     tuple file(cds_file), file(tree) from ch_run_codeml_align_input.combine(ch_run_codeml_tree_input)
+    script:
+    """
+    python3 ${params.bin_dir}/annotate_tree.py $tree_one $tree_two $tree_three
+    """
+}
+
+// Here we create codeml control files.
+// Previously we were going to a lot of effort to incorporate
+// some sort of parallelisation. However, let's see if we can make use of nextflow
+// format here and run one instance per cds input.
+// When we run this we will check to see that there are sequences in the alignment and 
+// that the alignment is divisible by 3. If either of these assertions fails
+// we will exit without error. This means that the *.out file output needs to be optional
+// Having an optional *.out file causes issues for storeDir as it causes all process to skip
+// rather than look for a .out file. To work around this we have written in the output
+// of a file called status.txt that will hold a '0' or a '1' depending on whether the
+// process caused an error or not. This way the process will be forced to run
+process run_codeml{
+    tag "$cds_file"
+    conda "envs/nf_codeml.yaml"
+    storeDir params.nf_codeml_out
+    input:
+    tuple file(cds_file), file(tree) from ch_run_codeml_align_input.combine(ch_run_codeml_tree_input)
     
-//     output:
-//     file "${cds_file.toString().split('_')[0]}*_codeml_results.out" optional true into ch_collate_codeml_results_intput
-//     file "${cds_file.toString().split('_')[0]}_status.txt" into ch_force_process_run_output
-//     script:
-//     """
-//     python3 ${params.bin_dir}/run_codeml.py $cds_file $tree
-//     """
-// }
+    output:
+    file "${cds_file.toString().split('_')[0]}_codeml_results.out" optional true into ch_collate_codeml_results_intput
+    file "${cds_file.toString().split('_')[0]}_status.txt" into ch_force_process_run_output
+    script:
+    """
+    python3 ${params.bin_dir}/run_codeml.py $cds_file $tree
+    """
+}
 
-// process collate_codeml_results{
-//     tag "collate_codeml_results"
-//     conda "envs/nf_python_scripts.yaml"
-//     storeDir "nf_dnds_df_summary"
+process collate_codeml_results{
+    tag "collate_codeml_results"
+    conda "envs/nf_python_scripts.yaml"
+    storeDir params.nf_dnds_df_summary
 
-//     input:
-//     file codeml_out_file from ch_collate_codeml_results_intput.collect()
-//     output:
-//     file "codeml_results_df.csv" into ch_collate_codeml_results
+    input:
+    file codeml_out_file from ch_collate_codeml_results_intput.collect()
+    output:
+    file "codeml_results_df.csv" into ch_collate_codeml_results
 
-//     script:
-//     """
-//     python3 ${params.bin_dir}/collate_codeml_results.py ${params.sra_list_as_csv}
-//     """
-// }
+    script:
+    """
+    python3 ${params.bin_dir}/collate_codeml_results.py ${params.sra_list_as_csv}
+    """
+}

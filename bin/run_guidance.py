@@ -31,12 +31,12 @@ class RunGuidance:
             else:
                 raise RuntimeError(f'Despite trying to rerun the Guidance analysis 5 times, there seems to be something wrong with {self.input_fasta}')
 
-def check_for_output_files(self):
-    if os.path.exists(os.path.join('.', f'{self.orth_group_id}.MAFFT.Guidance2_res_pair_res.PROT.scr')):
-        if os.path.exists(os.path.join('.', f'{self.orth_group_id}.MAFFT.PROT.aln')):
-            if os.path.exists(os.path.join('.', f'{self.orth_group_id}.MAFFT.aln.With_Names')):
-                return True
-    return False
+    def check_for_output_files(self):
+        if os.path.exists(os.path.join('.', f'{self.orth_group_id}.MAFFT.Guidance2_res_pair_res.PROT.scr')):
+            if os.path.exists(os.path.join('.', f'{self.orth_group_id}.MAFFT.PROT.aln')):
+                if os.path.exists(os.path.join('.', f'{self.orth_group_id}.MAFFT.aln.With_Names')):
+                    return True
+        return False
 
 # I'm getting really annoyed by the random errors taht seem to happen in Guidance but don't throw the runtime error
 # generally the cause of the error is that one of the expected output files is missing.
