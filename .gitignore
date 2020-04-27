@@ -49,3 +49,4 @@ nf_master_fasta_and_q_file
 nf_dnds_df_summary/
 bin/clean_up_pep_files.py
 nf_blast_results/
+nf_*/

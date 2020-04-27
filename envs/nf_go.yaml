@@ -1,0 +1,7 @@
+name: nf_go
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - mmseqs2
+  - blast
