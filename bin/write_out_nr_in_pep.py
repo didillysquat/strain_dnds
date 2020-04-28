@@ -10,16 +10,12 @@ class WriteOutTrEMBLInFasta:
         # A set of the seq names that returned a result
         self.mmseqs_out_name_set = self._make_mmseqs_out_name_set()
         # List of the full paths in which to search for the pep file of interest
-        self.pep_input_directories = sys.argv[2].split(',')
+        self.pep_input_directories = sys.argv[2]
         self.name_of_pep_file = sys.argv[3].split('/')[-1]
         self.pep_file_dict = None
-        for dir in self.pep_input_directories:
-            if os.path.isfile(os.path.join(dir, self.name_of_pep_file)):
-                found = True
-                with open(os.path.join(dir, self.name_of_pep_file), 'r') as f:
-                    pep_file_list = [line.rstrip() for line in f]
-                    self.pep_file_dict = {pep_file_list[i].split()[0][1:]:pep_file_list[i+1] for i in range(0, len(pep_file_list), 2)}
-                break
+        with open(os.path.join(self.pep_input_directories, self.name_of_pep_file), 'r') as f:
+            pep_file_list = [line.rstrip() for line in f]
+            self.pep_file_dict = {pep_file_list[i].split()[0][1:]:pep_file_list[i+1] for i in range(0, len(pep_file_list), 2)}
         if self.pep_file_dict is None:
             raise RuntimeError("Couldn't locate original .pep file")
         
@@ -27,7 +23,7 @@ class WriteOutTrEMBLInFasta:
         # sequences didn't get a blast results
         # put these into the new pep
         self.new_pep_list = self._make_new_pep_list()
-        self.new_pep_file_name = self.name_of_pep_file.replace('_longest_iso_orfs.single_orf.pep', '.mmseqs.trembl.in.pep')
+        self.new_pep_file_name = self.name_of_pep_file.replace('.mmseqs.trembl.in.pep', '.mmseqs.nr.in.pep')
         self._write_out_new_pep()
         
 
