@@ -20,6 +20,7 @@ import pandas as pd
 import urllib.parse
 import urllib.request
 import pickle
+from io import StringIO
 
 class WriteOutTrEMBLInFasta:
     def __init__(self):
@@ -31,9 +32,10 @@ class WriteOutTrEMBLInFasta:
         self.name_of_pep_file = sys.argv[3].split('/')[-1]
         self.cache_dir_base = sys.argv[4]
         self.base_name = self.name_of_pep_file.replace('_longest_iso_orfs.single_orf.pep', '')
-        self.uniprot_to_go_dict_cache_path = os.path.join(self.cache_dir_base, f'{self.base_name}_uniprot_2_go_dict.p')
+        self.uniprot_to_go_dict_cache_path = os.path.join(self.cache_dir_base, f'{self.base_name}_uniprot_to_go_dict.p')
         self.uniprot_to_go_dict = defaultdict(list)
         self.pep_file_dict = None
+        self.go_associations_dict = defaultdict(list)
         for dir in self.pep_input_directories:
             if os.path.isfile(os.path.join(dir, self.name_of_pep_file)):
                 found = True
@@ -47,21 +49,74 @@ class WriteOutTrEMBLInFasta:
         # the df that will hold the GO annotations that we were able to find.
         # We will make this as a dict to start with and then create from there at the end
         self._go_df_dict = {}
-        self._go_df_headers = ['db', 'query', 'match', 'e_value', 'hit_number', 'GO_accessions']
+        self._go_df_headers = ['db', 'match', 'e_value', 'hit_number', 'GO_accessions']
         # Read through the original .pep file and see which 
         # sequences didn't get a blast results
         # put these into the new pep
         self.new_pep_list = self._add_no_match_seqs_to_pep()
-
-        # We need a dict version of the goa_all
-        self.path_to_goa_uniprot_all_gaf = sys.argv[4]
-        self.goa_uniprot_all_df = self._make_goa_uniprot_all_df()
+        
         # now we need to go through the mmseqs file and see which matches can be associated to a GO
+        self._log_go_associations()
 
         self.new_pep_file_name = self.name_of_pep_file.replace('_longest_iso_orfs.single_orf.pep', '.mmseqs.trembl.in.pep')
         self._write_out_new_pep()
         
-    def _get_uniprot_go_annotations(self, set_of_uniprot_accesions):
+    def _log_go_associations(self):
+        """
+        This will do a lot of the work.
+        We will work our way through the self.mmseqs_match_list
+        We will process one match per query at a time.
+        In this way, we will minimise the number of remote requests to the uniprot server
+        we have to do.
+        I'm worried that if we hit it with too big a request that we will cuase it some issues
+        We will keep track of which result number we are on as we will want to log this.
+        """
+        match_number = 1
+        # this will be a sub set of the results from the self.mmseqs_match_list
+        # one for each query that hasn't already been associated with a GO
+        # sub_match_list = []
+        # sub_match_query_set = set()
+        # sub_match_list_for_next_iteration = []
+        while True:
+            sub_match_list = []
+            sub_match_query_set = set()
+            sub_match_list_for_next_iteration = []
+            for line in self.mmseqs_match_list:
+                query = line.split('\t')[0]
+                if query in self._go_df_dict:
+                    # Then we already have an annotation for this query
+                    # Simply skip this line
+                    continue
+                if query not in sub_match_query_set:
+                    # Then we haven't had a GO annotation for this yet
+                    # and we haven't already added one match for this query to the sub_match_list
+                    # Add this match, add query to set
+                    sub_match_list.append(line)
+                    sub_match_query_set.add(query)
+                elif query in sub_match_query_set:
+                    # Then we already have a match to process for this query
+                    # so we should add all other lines into the sub_match_list_for_next_iteration
+                    sub_match_list_for_next_iteration.append(line)
+            # At this point we have a list of query matches (one per query)
+            # That we need to see if there are annotations for.
+            # First we need to get a dictionary that maps the match accesssion to a list
+            # of GO terms.
+            match_accessions = set([_.split('\t')[1] for _ in sub_match_list])
+            self._update_uniprot_to_go_dict(match_accessions)
+            # Now we have the mappings that we need to see if there are go associations
+            for line in self.sub_match_list:
+                match = line.split('\t')[1]
+                go_list = self.uniprot_to_go_dict[match]
+                if go_list:
+                    # log the association
+                    self.go_associations_dict[line.split('\t')[0]] = ['sprot', match, line.split('\t')[2], match_number, go_list]
+                # nothing to do if no succesful association
+            if not sub_match_list_for_next_iteration:
+                break
+            match_number += 1
+
+
+    def _update_uniprot_to_go_dict(self, set_of_uniprot_accesions):
         """
         This function will take in a request for a set_of_uniprot_accessions
         It will load up our locally cached dictionary of uniprot accessions to GO
@@ -77,9 +132,43 @@ class WriteOutTrEMBLInFasta:
             self.uniprot_to_go_dict = pickle.load(open(self.uniprot_to_go_dict_cache_path, 'rb'))
         # else we have already initiated it as a default dict
         #get a set of the accessions that we need to get
-        accessions_to_retrieve = set([_ in set_of_uniprot_accesions if _ not in self.uniprot_to_go_dict.keys()])
+        accessions_to_retrieve = ' '.join([_ for _ in set_of_uniprot_accesions if _ not in self.uniprot_to_go_dict.keys()][:10])
         if accessions_to_retrieve:
             #TODO if there are some to get then get them, else just return the dict as it is.
+            url = 'https://www.uniprot.org/uploadlists/'
+            params = {
+            'from': 'ACC+ID',
+            'to': 'ACC',
+            'format': 'tab',
+            'query': accessions_to_retrieve,
+            'columns': 'go-id'
+            }
+
+            data = urllib.parse.urlencode(params)
+            data = data.encode('utf-8')
+            headers = {'User-Agent': 'Benjamin Hume', 'From': 'benjamin.hume@kaust.edu.sa'}
+            req = urllib.request.Request(url, data, headers)
+            with urllib.request.urlopen(req) as f:
+                response = f.read()
+            for line for 
+            go_info = StringIO(response.decode('utf-8')))
+            for line in go_info[1:]:
+                go_list = line.split('\t')[0]
+                if not go_list:
+                    continue
+                else:
+                    self.uniprot_to_go_dict[line.split('\t')[1]] = ''.join(go_info.split(' '))
+                    # TODO we are here.
+            foo = response.decode('utf-8')
+            print(foo)
+            foo = 'bar'
+            #TODO process the output so that we add to the dictionary, pickle out and
+            # update self.uniprot_to_go_dict
+            # return 
+        else:
+            # there are no new uniprot seqs to get the go terms for and we
+            # can work with the dict that we already have
+            return 
 
     def _make_goa_uniprot_all_df(self):
         # We 
