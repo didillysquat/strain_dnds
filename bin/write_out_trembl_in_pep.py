@@ -19,8 +19,10 @@ from collections import defaultdict
 import pandas as pd
 import urllib.parse
 import urllib.request
+from urllib.error import HTTPError
 import pickle
 from io import StringIO
+import time
 
 class WriteOutTrEMBLInFasta:
     def __init__(self):
@@ -33,13 +35,12 @@ class WriteOutTrEMBLInFasta:
         self.cache_dir_base = sys.argv[4]
         self.base_name = self.name_of_pep_file.replace('_longest_iso_orfs.single_orf.pep', '')
         self.uniprot_to_go_dict_cache_path = os.path.join(self.cache_dir_base, f'{self.base_name}_uniprot_to_go_dict.p')
-        self.uniprot_to_go_dict = defaultdict(list)
+        self.uniprot_to_go_dict = {}
         self.pep_file_dict = None
-        self.go_associations_dict = defaultdict(list)
-        for dir in self.pep_input_directories:
-            if os.path.isfile(os.path.join(dir, self.name_of_pep_file)):
+        for in_dir in self.pep_input_directories:
+            if os.path.isfile(os.path.join(in_dir, self.name_of_pep_file)):
                 found = True
-                with open(os.path.join(dir, self.name_of_pep_file), 'r') as f:
+                with open(os.path.join(in_dir, self.name_of_pep_file), 'r') as f:
                     pep_file_list = [line.rstrip() for line in f]
                     self.pep_file_dict = {pep_file_list[i].split()[0][1:]:pep_file_list[i+1] for i in range(0, len(pep_file_list), 2)}
                 break
@@ -47,8 +48,10 @@ class WriteOutTrEMBLInFasta:
             raise RuntimeError("Couldn't locate original .pep file")
         
         # the df that will hold the GO annotations that we were able to find.
-        # We will make this as a dict to start with and then create from there at the end
-        self._go_df_dict = {}
+        # We will make this as a dict to start with and then create the df in the final
+        # script.
+        self.go_df_dict = {}
+        self.go_df_dict_path = os.path.join(self.cache_dir_base, f'{self.base_name}_go_df_dict.p')
         self._go_df_headers = ['db', 'match', 'e_value', 'hit_number', 'GO_accessions']
         # Read through the original .pep file and see which 
         # sequences didn't get a blast results
@@ -60,6 +63,8 @@ class WriteOutTrEMBLInFasta:
 
         self.new_pep_file_name = self.name_of_pep_file.replace('_longest_iso_orfs.single_orf.pep', '.mmseqs.trembl.in.pep')
         self._write_out_new_pep()
+        # Pickle out the go_df_dict
+        pickle.dump(self.go_df_dict, open(self.go_df_dict_path, 'wb'))
         
     def _log_go_associations(self):
         """
@@ -83,7 +88,7 @@ class WriteOutTrEMBLInFasta:
             sub_match_list_for_next_iteration = []
             for line in self.mmseqs_match_list:
                 query = line.split('\t')[0]
-                if query in self._go_df_dict:
+                if query in self.go_df_dict:
                     # Then we already have an annotation for this query
                     # Simply skip this line
                     continue
@@ -101,22 +106,46 @@ class WriteOutTrEMBLInFasta:
             # That we need to see if there are annotations for.
             # First we need to get a dictionary that maps the match accesssion to a list
             # of GO terms.
-            match_accessions = set([_.split('\t')[1] for _ in sub_match_list])
-            self._update_uniprot_to_go_dict(match_accessions)
+            print(f'\n{len(sub_match_query_set)} queries left to find GO matches for')
+            print(f'{len(sub_match_list_for_next_iteration)} match lines left to process')
+            # If there are less than 2000 match lines left to process, then let's just
+            # request all the matches at once, to save on time.
+            if len(sub_match_query_set) + len(sub_match_list_for_next_iteration) < 2000:
+                match_accessions = []
+                match_accessions.extend([_.split('\t')[1] for _ in sub_match_list])
+                match_accessions.extend([_.split('\t')[1] for _ in sub_match_list_for_next_iteration])
+                match_accessions = set(match_accessions)
+            else:
+                match_accessions = set([_.split('\t')[1] for _ in sub_match_list])
+            self._update_uniprot_to_go_dict(match_accessions, match_number)
             # Now we have the mappings that we need to see if there are go associations
-            for line in self.sub_match_list:
+            for line in sub_match_list:
                 match = line.split('\t')[1]
-                go_list = self.uniprot_to_go_dict[match]
-                if go_list:
-                    # log the association
-                    self.go_associations_dict[line.split('\t')[0]] = ['sprot', match, line.split('\t')[2], match_number, go_list]
-                # nothing to do if no succesful association
+                # The match will only be in the dict if there is an annotation for it
+                # log the association
+                try:
+                    go_list = self.uniprot_to_go_dict[match]
+                    if go_list != 'no_annotation':
+                        self.go_df_dict[line.split('\t')[0]] = ['sprot', match, line.split('\t')[2], match_number, go_list]
+                except KeyError:
+                    raise RuntimeError(f'{match} was not found in the uniprot_to_go_dict')
+                    # nothing to do if no succesful association
             if not sub_match_list_for_next_iteration:
                 break
+            else:
+                self.mmseqs_match_list = sub_match_list_for_next_iteration
             match_number += 1
-
-
-    def _update_uniprot_to_go_dict(self, set_of_uniprot_accesions):
+        
+        # At this point we have found all of the go associations that we can from
+        # this set of mmseqs search results
+        # We need to create and pickle out the annotation dict
+        # We need to add those queries that didn't return a valid annotation to the pep
+        # for writing out for trembl.
+        name_to_add_to_pep = [_ for _ in self.mmseqs_out_name_set if _ not in self.go_df_dict]
+        for query_name in name_to_add_to_pep:
+            self.new_pep_list.extend([f'>{query_name}', self.pep_file_dict[query_name]])
+        
+    def _update_uniprot_to_go_dict(self, set_of_uniprot_accesions, match_number):
         """
         This function will take in a request for a set_of_uniprot_accessions
         It will load up our locally cached dictionary of uniprot accessions to GO
@@ -128,11 +157,12 @@ class WriteOutTrEMBLInFasta:
         otherwise.
         """
         # First check to see if the cache already exists
+        print(f'updating uniprot_to_go_dict for match_number {match_number}')
         if os.path.exists(self.uniprot_to_go_dict_cache_path):
             self.uniprot_to_go_dict = pickle.load(open(self.uniprot_to_go_dict_cache_path, 'rb'))
         # else we have already initiated it as a default dict
         #get a set of the accessions that we need to get
-        accessions_to_retrieve = ' '.join([_ for _ in set_of_uniprot_accesions if _ not in self.uniprot_to_go_dict.keys()][:10])
+        accessions_to_retrieve = ' '.join([_ for _ in set_of_uniprot_accesions if _ not in self.uniprot_to_go_dict.keys()])
         if accessions_to_retrieve:
             #TODO if there are some to get then get them, else just return the dict as it is.
             url = 'https://www.uniprot.org/uploadlists/'
@@ -148,27 +178,41 @@ class WriteOutTrEMBLInFasta:
             data = data.encode('utf-8')
             headers = {'User-Agent': 'Benjamin Hume', 'From': 'benjamin.hume@kaust.edu.sa'}
             req = urllib.request.Request(url, data, headers)
-            with urllib.request.urlopen(req) as f:
-                response = f.read()
-            for line for 
-            go_info = StringIO(response.decode('utf-8')))
-            for line in go_info[1:]:
+            response = self._make_request(req)
+            go_info = StringIO(response.decode('utf-8'))
+            for line in [_.rstrip() for _ in go_info.readlines()[1:]]:
                 go_list = line.split('\t')[0]
                 if not go_list:
-                    continue
+                    self.uniprot_to_go_dict[line.split('\t')[1]] = 'no_annotation'
                 else:
-                    self.uniprot_to_go_dict[line.split('\t')[1]] = ''.join(go_info.split(' '))
-                    # TODO we are here.
-            foo = response.decode('utf-8')
-            print(foo)
-            foo = 'bar'
-            #TODO process the output so that we add to the dictionary, pickle out and
-            # update self.uniprot_to_go_dict
-            # return 
+                    self.uniprot_to_go_dict[line.split('\t')[1]] = ''.join(go_list.split(' '))
+            
+            # Now pickle out the dict
+            pickle.dump(self.uniprot_to_go_dict, open(self.uniprot_to_go_dict_cache_path, 'wb'))
+            return
         else:
             # there are no new uniprot seqs to get the go terms for and we
             # can work with the dict that we already have
+            print('uniprot_to_go_dict already up-to-date')
             return 
+
+    def _make_request(self, req):
+        try:
+            print('Attempting request')
+            with urllib.request.urlopen(req) as f:
+                print("Request successful!")
+                return f.read()
+        except HTTPError as e:
+            print(e)
+            print('Waiting 10s and retrying request')
+            time.sleep(10)
+            self._make_request()
+        except ConnectionResetError as e:
+            print(e)
+            print('Waiting 10s and retrying request')
+            time.sleep(10)
+            self._make_request()
+
 
     def _make_goa_uniprot_all_df(self):
         # We 

@@ -1,26 +1,23 @@
 #!/usr/bin/env python3
-# This script will take in the output mmseq files from running the trembl search
+# This script will take in the output mmseq files from running the nr search
 # and look to see which of the matches allow us to associate a GO.
 # If we are not able to associate a GO then we will write out the query sequence
-# into a new pep that will be run against the nr database.
+# into a new pep that will be run against the panzer server.
 # For each query that we do get a hit for, we will add it to the go_df_dict
 # that was created and pickled out as part of the processing of the sprot out
 # results.
-
+# To do the mapping we will first attempt to map to an ncbi gene id
+# using gene2annotation. We will then try to map this geneid
+# to a GO using gene2go.
+# We are expecting the return from this to be very low.
+# We should also convert the go_df_dict into a final dataframe that can be output
+# for john.
 
 import sys
 import os
 from collections import defaultdict
 import pandas as pd
-import urllib.parse
-import urllib.request
-from urllib.error import HTTPError
 import pickle
-from io import StringIO
-import time
-import requests
-from multiprocessing import Pool, current_process
-from multiprocessing import Queue, Manager, Process
 
 class WriteOutTrEMBLInFasta:
     def __init__(self):
@@ -31,10 +28,11 @@ class WriteOutTrEMBLInFasta:
         self.pep_input_directory = sys.argv[2]
         self.original_pep_file_name = sys.argv[3].split('/')[-1]
         self.cache_dir_base = sys.argv[4]
-        self.base_name = self.original_pep_file_name.replace('.mmseqs.trembl.in.pep', '')
+        self.base_name = self.original_pep_file_name.replace('.mmseqs.nr.in.pep', '')
         self.uniprot_to_go_dict_cache_path = os.path.join(self.cache_dir_base, f'{self.base_name}_uniprot_to_go_dict.p')
         self.uniprot_to_go_dict = pickle.load(open(self.uniprot_to_go_dict_cache_path, 'rb'))
         self.pep_file_dict = None
+        self.df_columns = []
         try:
             with open(os.path.join(self.pep_input_directory, self.original_pep_file_name), 'r') as f:
                 pep_file_list = [line.rstrip() for line in f]
@@ -53,10 +51,14 @@ class WriteOutTrEMBLInFasta:
         # put these into the new pep
         self.new_pep_list = self._add_no_match_seqs_to_pep()
         
+        # Make the look up dicts for gene2accession
+        self.gene2accession_path = "/share/databases/gene2accession/gene2accession"
+        
+
         # now we need to go through the mmseqs file and see which matches can be associated to a GO
         self._log_go_associations()
 
-        self.new_pep_file_name = self.original_pep_file_name.replace('.mmseqs.trembl.in.pep', '.mmseqs.nr.in.pep')
+        self.new_pep_file_name = self.original_pep_file_name.replace('.mmseqs.nr.in.pep', '.mmseqs.panzer.in.pep')
         self._write_out_new_pep()
         # Pickle out the go_df_dict
         pickle.dump(self.go_df_dict, open(self.go_df_dict_path, 'wb'))
@@ -143,7 +145,7 @@ class WriteOutTrEMBLInFasta:
                 try:
                     go_list = self.uniprot_to_go_dict[match]
                     if go_list != 'no_annotation':
-                        self.go_df_dict[line.split('\t')[0]] = ['trembl', match, line.split('\t')[2], match_number, go_list]
+                        self.go_df_dict[line.split('\t')[0]] = ['sprot', match, line.split('\t')[2], match_number, go_list]
                 except KeyError:
                     raise RuntimeError(f'{match} was not found in the uniprot_to_go_dict')
 
