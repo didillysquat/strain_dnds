@@ -14,16 +14,18 @@
 params.pep_input_directories = "/home/humebc/projects/parky/strain_dnds/nf_sonicparanoid/10_2/,/home/humebc/projects/parky/strain_dnds/nf_sonicparanoid/4/"
 params.path_to_uniprot_sprot_mmseqs = "/share/databases/uniprot_sprot/mmseqs_uniprot_sprot/mmseqs_uniprot_sprot.targetDB"
 params.path_to_uniprot_trembl_mmseqs = "/share/databases/uniprot_trembl/mmseqs_uniprot_trembl/mmseqs_uniprot_trembl.targetDB"
-params.path_to_nr_mmseqs = "/share/databases/nr/mmseqs_nr/nr.targetDB"
+params.path_to_nr_mmseqs = "/home/humebc/mmseqs_nr/nr.targetDB"
 params.nf_mmseqs_trembl_query_dbs = "/home/humebc/projects/parky/strain_dnds/nf_mmseqs_trembl_query_dbs"
 params.nf_mmseqs_nr_query_dbs = "/home/humebc/projects/parky/strain_dnds/nf_mmseqs_nr_query_dbs"
 params.nf_mmseqs_panzer_query_dbs = "/home/humebc/projects/parky/strain_dnds/nf_mmseqs_panzer_query_dbs"
 Channel.fromPath(["/home/humebc/projects/parky/strain_dnds/nf_sonicparanoid/10_2/*.pep", "/home/humebc/projects/parky/strain_dnds/nf_sonicparanoid/4/SRR_b_min_c_longest_iso_orfs.single_orf.pep", "/home/humebc/projects/parky/strain_dnds/nf_sonicparanoid/4/SRR_b_psyg_c_longest_iso_orfs.single_orf.pep"]).into{ch_input_swiss_prot_blast; ch_input_make_mmseqs_query_dbs_sprot}
 params.bin_dir = "${workflow.launchDir}/bin"
-params.goa_uniprot_all_gaf_path = "/share/databases/goa_uniprot_all/goa_uniprot_all.gaf"
 params.go_cache_dir = "/home/humebc/projects/parky/strain_dnds/nf_go_annotations/cache"
 params.gene2accession_chunk_dir = "/home/humebc/gene2accession_testing"
 params.nf_mmseqs_nr_results = "/home/humebc/projects/parky/strain_dnds/nf_mmseqs_nr_results"
+params.gene2accession_pickle_name = "gene2accession.p"
+params.gene2accession_pickle_dir = "/home/humebc/projects/parky/strain_dnds/nf_gene2accession_mapping"
+params.gene2go_path = "/share/databases/gene2go/gene2go"
 
 
 // Do the BLAST swiss_prot_alignments
@@ -192,12 +194,12 @@ process mmseqs_search_trembl{
     """
 }
 
-// // // Once the trembl search is complete, we will want to look through the output files to get an idea
-// // // of how many of the query seqs still haven't had a hit in either the sprot or trembl databases.
-// // // We can then work with these sequences to either put them through the nr database or just 
-// // // link them up to GO annotations.
-// // // In Seb's previous paper, he ran the sequeneces against nr, but I don't see how to get from
-// // // the nr matches to a list of GO terms. Unless we use something like interproscan.
+// // Once the trembl search is complete, we will want to look through the output files to get an idea
+// // of how many of the query seqs still haven't had a hit in either the sprot or trembl databases.
+// // We can then work with these sequences to either put them through the nr database or just 
+// // link them up to GO annotations.
+// // In Seb's previous paper, he ran the sequeneces against nr, but I don't see how to get from
+// // the nr matches to a list of GO terms. Unless we use something like interproscan.
 
 process mmseqs_write_out_new_in_pep_for_nr_search{
     cache 'lenient'
@@ -280,21 +282,46 @@ process mmseqs_search_nr{
 // and then to a GO.
 // The gene2accession file is massive and so we are going to dedicate a process just to creating
 // a mapping between our matches in the nr and 
-// process make_gene2accession_mapping{
-//     cpus 200
-//     tag "make_gene2accession_mapping"
-//     storeDir "nf_gene2accession_mapping"
-//     conda "envs/nf_python_scripts.yaml"
+process make_gene2accession_mapping{
+    cpus 200
+    tag "make_gene2accession_mapping"
+    storeDir "nf_gene2accession_mapping"
+    conda "envs/nf_python_scripts.yaml"
 
-//     input:
-//     file(nr_out_files) from ch_output_make_gene2accession_mapping.collect()
+    input:
+    file(nr_out_files) from ch_output_make_gene2accession_mapping.collect()
 
-//     output:
-//     "gene2accession.p" into ch_output_gene2accession_mapping_dict
+    output:
+    file "gene2accession.p" into ch_output_gene2accession_mapping_dict
 
-//     script:
-//     """
-//     python3 ${params.bin_dir}/make_gene2accession_mapping.py ${params.gene2accession_chunk_dir} ${params.nf_mmseqs_nr_results}
-//     """
-// }
+    script:
+    """
+    python3 ${params.bin_dir}/make_gene2accession_mapping.py ${params.gene2accession_chunk_dir}
+    """
+}
+
+process mmseqs_write_out_new_in_pep_for_panzer_search{
+    cache 'lenient'
+    conda "envs/nf_python_scripts.yaml"
+    tag "${mmseqs_out.toString().replaceAll('.mmseqs.trembl.out.blast_format', '')}"
+    storeDir params.nf_mmseqs_panzer_query_dbs
+    
+    input:
+    file mmseqs_out from ch_output_mmseqs_search_nr
+
+    output:
+    file "$new_pep_file" into ch_output_mmseqs_in_panzer_pep
+    file "$df_out_csv" into ch_output_go_df_out
+    
+    script:
+    // We will write out the new .pep file to the local work directory, and then run the mmseqs createdb
+    // function here and pull out the new db files.
+    base_name = "${mmseqs_out.toString().replaceAll('.mmseqs.nr.out.blast_format', '')}"
+    old_pep_file = "${base_name}.mmseqs.nr.in.pep"
+    new_pep_file = "${base_name}.mmseqs.panzer.in.pep"
+    df_out_csv = "${base_name}_go_df_dict.csv"
+    """
+    python3 ${params.bin_dir}/write_out_panzer_in_pep.py $mmseqs_out ${params.nf_mmseqs_nr_query_dbs} $old_pep_file ${params.go_cache_dir} ${params.gene2accession_pickle_dir}/${params.gene2accession_pickle_name} ${params.gene2go_path}
+    """
+}
 
