@@ -26,6 +26,7 @@ params.nf_mmseqs_nr_results = "/home/humebc/projects/parky/strain_dnds/nf_mmseqs
 params.gene2accession_pickle_name = "gene2accession.p"
 params.gene2accession_pickle_dir = "/home/humebc/projects/parky/strain_dnds/nf_gene2accession_mapping"
 params.gene2go_path = "/share/databases/gene2go/gene2go"
+params.nf_panzer_go_annotations = "/home/humebc/projects/parky/strain_dnds/nf_panzer_go_annotations"
 
 
 // Do the BLAST swiss_prot_alignments
@@ -322,6 +323,34 @@ process mmseqs_write_out_new_in_pep_for_panzer_search{
     df_out_csv = "${base_name}_go_df_dict.csv"
     """
     python3 ${params.bin_dir}/write_out_panzer_in_pep.py $mmseqs_out ${params.nf_mmseqs_nr_query_dbs} $old_pep_file ${params.go_cache_dir} ${params.gene2accession_pickle_dir}/${params.gene2accession_pickle_name} ${params.gene2go_path}
+    """
+}
+
+process process_panzer_output{
+    conda "envs/nf_python_scripts.yaml"
+    tag "$panzer_in_pep"
+    storeDir "nf_panzer_go_annotations"
+
+    input:
+    // We will use the pep files to generate the name for the 
+    // .panzer.go.out file we are interested in
+    file panzer_in_pep from ch_output_mmseqs_in_panzer_pep
+
+    output:
+    file "$new_pep_file" into ch_output_mmseqs_in_no_anno_pep
+    file "$df_out_csv" into ch_output_go_df_w_panzer_out
+    file "$pickle_dict" into ch_output_go_df_w_panzer_dict_out
+
+    script:
+    // We will write out the new .pep file to the local work directory, and then run the mmseqs createdb
+    // function here and pull out the new db files.
+    base_name = "${panzer_in_pep.toString().replaceAll('.mmseqs.panzer.in.pep', '')}"
+    old_pep_file = "${base_name}.mmseqs.panzer.in.pep"
+    new_pep_file = "${base_name}.mmseqs.no_annotation.in.pep"
+    df_out_csv = "${base_name}_go_df_w_panzer.csv"
+    pickle_dict = "${base_name}_go_df_w_panzer_dict.p"
+    """
+    python3 ${params.bin_dir}/write_out_no_annotation_in_pep.py ${params.nf_panzer_go_annotations} ${params.nf_mmseqs_panzer_query_dbs} $old_pep_file ${params.go_cache_dir}
     """
 }
 
