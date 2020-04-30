@@ -6,9 +6,11 @@
 # For each query that we do get a hit for, we will add it to the go_df_dict
 # that was created and pickled out as part of the processing of the sprot out
 # results.
-# To do the mapping we will first attempt to map to an ncbi gene id
-# using gene2annotation. We will then try to map this geneid
-# to a GO using gene2go.
+# To do the first mapping we have created a mapping dict that is pickled out
+# at /home/humebc/projects/parky/strain_dnds/nf_gene2accession_mapping/gene2accession.p
+# We can read this in. If a match is not in the keys, then there was no translation to
+# a gene id.
+# we will then need to read in the gene2go and make a dict from this.
 # We are expecting the return from this to be very low.
 # We should also convert the go_df_dict into a final dataframe that can be output
 # for john.
@@ -19,7 +21,7 @@ from collections import defaultdict
 import pandas as pd
 import pickle
 
-class WriteOutTrEMBLInFasta:
+class WriteOutPanzerInFasta:
     def __init__(self):
         # A set of the seq names that returned a result
         # And the actual output match file as a list
@@ -28,11 +30,11 @@ class WriteOutTrEMBLInFasta:
         self.pep_input_directory = sys.argv[2]
         self.original_pep_file_name = sys.argv[3].split('/')[-1]
         self.cache_dir_base = sys.argv[4]
+        
         self.base_name = self.original_pep_file_name.replace('.mmseqs.nr.in.pep', '')
-        self.uniprot_to_go_dict_cache_path = os.path.join(self.cache_dir_base, f'{self.base_name}_uniprot_to_go_dict.p')
-        self.uniprot_to_go_dict = pickle.load(open(self.uniprot_to_go_dict_cache_path, 'rb'))
         self.pep_file_dict = None
         self.df_columns = []
+        self.go_count = 0
         try:
             with open(os.path.join(self.pep_input_directory, self.original_pep_file_name), 'r') as f:
                 pep_file_list = [line.rstrip() for line in f]
@@ -52,8 +54,11 @@ class WriteOutTrEMBLInFasta:
         self.new_pep_list = self._add_no_match_seqs_to_pep()
         
         # Make the look up dicts for gene2accession
-        self.gene2accession_path = "/share/databases/gene2accession/gene2accession"
-        
+        self.gene2accession_dict_pickle_path = sys.argv[5]
+        # make sure it is no longer a default dict
+        self.g2a_dict = dict(pickle.load(open(self.gene2accession_dict_pickle_path, 'rb')))
+        self.gene2go_path = sys.argv[6]
+        self.g2go_dict = self._make_g2go_dict()
 
         # now we need to go through the mmseqs file and see which matches can be associated to a GO
         self._log_go_associations()
@@ -62,7 +67,25 @@ class WriteOutTrEMBLInFasta:
         self._write_out_new_pep()
         # Pickle out the go_df_dict
         pickle.dump(self.go_df_dict, open(self.go_df_dict_path, 'wb'))
+        # But also write out the dict as a df finally
+        df = pd.DataFrame.from_dict(self.go_df_dict, orient='index', columns=['db', 'match_accession', 'e_value', 'match_ranking', 'go_terms'])
+        df.index.name = 'query'
+        df.to_csv(f'{self.base_name}_go_df_dict.csv', index=True)
+
         
+    def _make_g2go_dict(self):
+        g2go_dict = defaultdict(set)
+        with open(self.gene2go_path, 'r') as f:
+            for line in f.readlines()[1:]:
+                g2go_dict[line.split('\t')[1]].add(line.split('\t')[2])
+        # We can slim this down to only include the geneids that are in the g2a dict
+        gene_ids = set()
+        for v in self.g2a_dict.values():
+            gene_ids.update(v)
+        g2go_dict = {k: v for k, v in g2go_dict.items() if k in gene_ids}
+        # convert back from a default dict
+        return g2go_dict
+    
     def _log_go_associations(self):
         """
         This will do a lot of the work.
@@ -105,19 +128,6 @@ class WriteOutTrEMBLInFasta:
             # of GO terms.
             print(f'\n{len(sub_match_query_set)} queries left to find GO matches for')
             print(f'{len(sub_match_list_for_next_iteration)} match lines left to process')
-            # If there are less than 2000 match lines left to process, then let's just
-            # request all the matches at once, to save on time.
-            if len(sub_match_query_set) + len(sub_match_list_for_next_iteration) < 20000:
-                match_accessions = []
-                match_accessions.extend([_.split('\t')[1] for _ in sub_match_list])
-                match_accessions.extend([_.split('\t')[1] for _ in sub_match_list_for_next_iteration])
-                match_accessions = set(match_accessions)
-            else:
-                match_accessions = set([_.split('\t')[1] for _ in sub_match_list])
-            accessions_to_retrieve = [_ for _ in match_accessions if _ not in self.uniprot_to_go_dict.keys()]
-            # Then we will work in chunks to reduce the chances of a connection reset etc.
-            if accessions_to_retrieve:
-                self._update_uniprot_to_go_dict(accessions_to_retrieve)
             
             self._associate_go(sub_match_list, match_number)
             
@@ -143,93 +153,20 @@ class WriteOutTrEMBLInFasta:
                 # The match will only be in the dict if there is an annotation for it
                 # log the association
                 try:
-                    go_list = self.uniprot_to_go_dict[match]
-                    if go_list != 'no_annotation':
-                        self.go_df_dict[line.split('\t')[0]] = ['sprot', match, line.split('\t')[2], match_number, go_list]
+                    # will return a set
+                    gene_id = self.g2a_dict[match]
+                    go_set = set()
+                    for g_id in gene_id:
+                        try:
+                            go_set.update(self.g2go_dict[g_id])
+                        except KeyError:
+                            pass
+                    if go_set:
+                        self.go_count += 1
+                        print(f'Now found {self.go_count}')
+                        self.go_df_dict[line.split('\t')[0]] = ['nr', match, line.split('\t')[2], match_number, ';'.join(list(go_set))]
                 except KeyError:
-                    raise RuntimeError(f'{match} was not found in the uniprot_to_go_dict')
-
-    def _update_uniprot_to_go_dict(self, accessions_to_retrieve):
-        self.input_queue = Queue()
-        self.output_queue = Queue()
-        self.num_proc = 10
-        for chunk in self._chunks(accessions_to_retrieve, 250):
-            self.input_queue.put(chunk)
-        
-        for n in range(self.num_proc):
-            self.input_queue.put('STOP')
-
-        all_processes = []
-        for n in range(self.num_proc):
-            p = Process(target=self._get_request_results, args=())
-            all_processes.append(p)
-            p.start()
-        
-        done_count = 0
-        while done_count < self.num_proc:
-            result_list = self.output_queue.get()
-            if result_list == 'DONE':
-                done_count += 1
-            else:
-                for line in result_list[1:]:
-                    go_list = line.split('\t')[0]
-                    if not go_list:
-                        self.uniprot_to_go_dict[line.split('\t')[1]] = 'no_annotation'
-                    else:
-                        self.uniprot_to_go_dict[line.split('\t')[1]] = ''.join(go_list.split(' '))
-            # Now pickle out the dict
-            print(f'Main thread: successfully added {len(result_list) - 1} items to the uniprot_to_go_dict, total now {len(self.uniprot_to_go_dict.items())}')
-            pickle.dump(self.uniprot_to_go_dict, open(self.uniprot_to_go_dict_cache_path, 'wb'))
-
-        for p in all_processes:
-            p.join()
-        foo = 'ar'
-
-    def _get_request_results(self):
-        for chunk in iter(self.input_queue.get, 'STOP'):
-            accessions_to_retrieve = ' '.join(chunk)
-            response = self._make_request(accessions_to_retrieve)
-            go_info = StringIO(response)
-            self.output_queue.put([_.rstrip() for _ in go_info.readlines()])
-        self.output_queue.put('DONE')
-
-
-    def _chunks(self, lst, n):
-        """Yield successive n-sized chunks from lst."""
-        for i in range(0, len(lst), n):
-            yield lst[i:i + n]
-    
-    def _make_request(self, accessions_to_retrieve):
-        while True:
-            url = 'https://www.uniprot.org/uploadlists/'
-            params = {
-            'from': 'ACC+ID',
-            'to': 'ACC',
-            'format': 'tab',
-            'query': accessions_to_retrieve,
-            'columns': 'go-id'
-            }
-            data = urllib.parse.urlencode(params)
-            data = data.encode('utf-8')
-            headers = {'User-Agent': 'Benjamin Hume', 'From': 'benjamin.hume@kaust.edu.sa'}
-            # req = urllib.request.Request(url, data, headers)
-            # try:
-            print(f'{current_process().name}: attempting request')
-            try:
-                r = requests.get(url=url, params=params, headers=headers)
-                if r.status_code != 200:
-                    print(f"{current_process().name}: status code {r.status_code} returned")
-                    print('Waiting 30s before retrying connection')
-                    time.sleep(30)
-                    continue
-                print(f"{current_process().name}: request successful!")
-                return r.text
-            except requests.exceptions.ConnectionError as e:
-                print(f'{current_process().name}: {e}')
-                print(f'{current_process().name}: Waiting 30s before retrying connection')
-                time.sleep(30)
-                continue
-            
+                    pass
 
     def _make_mmseqs_out_name_set(self):
         with open(sys.argv[1], 'r') as f:
@@ -261,5 +198,34 @@ class WriteOutTrEMBLInFasta:
                 pass
         return new_pep_list
 
+# class CheekyFix:
+#     def __init__(self):
+#         self.list_of_dict_paths = self._make_list_of_dict_paths()
+#         for path in self.list_of_dict_paths:
+#             base_name = path.split('/')[-1].replace('_go_df_dict.p', '')
+#             dict_to_fix = pickle.load(open(path, 'rb'))
+#             path_to_trembl_in_pep = os.path.join("/home/humebc/projects/parky/strain_dnds/nf_mmseqs_trembl_query_dbs", f'{base_name}.mmseqs.trembl.in.pep')
+#             with open(path_to_trembl_in_pep, 'r') as f:
+#                 name_set = {_.rstrip()[1:] for _ in f if _.startswith('>')}
+#             # now we can go through the dict and for any query in the name_set change the db value to trembl
+#             # then write back out
+#             new_df_dict = {}
+#             count = 0
+#             for k, v in dict_to_fix.items():
+#                 if k in name_set:
+#                     new_list = list(v)
+#                     new_list[0] = 'trembl'
+#                     new_df_dict[k] = new_list
+#                     count += 1
+#                 else:
+#                     new_df_dict[k] = v
+#             print(f'changed {count} out of {len(dict_to_fix.items())}')
+#             pickle.dump(new_df_dict, open(path, 'wb'))
+
+#     def _make_list_of_dict_paths(self):
+#         cache_dir = "/home/humebc/projects/parky/strain_dnds/nf_go_annotations/cache"
+#         return [os.path.join(cache_dir, _) for _ in os.listdir(cache_dir) if 'go_df_dict.p' in _]
+
 if __name__ == "__main__":
-    wotif = WriteOutTrEMBLInFasta()
+    # CheekyFix()
+    wotif = WriteOutPanzerInFasta()

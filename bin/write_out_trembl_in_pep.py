@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+
+# TODO update the urllib to use requests like the write_out_nr_in_pep.py script does
+# BUT maybe it would be better to have another go at working with the raw
+# table using the MP process you used in make_gene2accession_mapping.py
+
 # This script will take in the output mmseq files from running the sprot search
 # and look to see which of the matches allow us to associate a GO.
 # If we are not able to associate a GO then we will write out the query sequence
